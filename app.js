@@ -1127,6 +1127,7 @@ function parseCallDateTime(val) {
 
 function parseCallReportRows(rawData) {
     const list = [];
+    const keyOccurrences = {};
     rawData.forEach(r => {
         const sessionId = String(r['Node ID - Session ID - Sequence No'] || r['Session ID'] || '').trim();
         // Ignore header/footer/summary rows (CUIC records start with "1-")
@@ -1147,7 +1148,7 @@ function parseCallReportRows(rawData) {
         const ringRaw = r['Ring Time'];
         const ringSec = parseDurationToSeconds(ringRaw);
         const ringStr = String(ringRaw).trim();
-        const isRing12 = (ringSec === 12) || ringStr === '0:00:12' || ringStr === '00:00:12' || ringStr === '12';
+        const isRing12 = (ringSec >= 12) || ringStr === '0:00:12' || ringStr === '00:00:12' || ringStr === '12';
 
         const queueSec = parseDurationToSeconds(r['Queue Time']);
         const talkSec  = parseDurationToSeconds(r['Talk Time']);
@@ -1160,8 +1161,14 @@ function parseCallReportRows(rawData) {
         const weekEndStr = startMoment.clone().endOf('isoWeek').format('DD/MM');
         const weekLabel = `สัปดาห์ที่ ${isoW} (${weekStartStr} - ${weekEndStr})`;
 
+        // Unique ID per leg to prevent Cisco multi-leg calls (e.g. RNA -> Transfer) from overwriting each other
+        const agentSlug = agentName.replace(/\s+/g, '_');
+        const baseKey = `${sessionId}_${agentSlug}_${ringSec}_${talkSec}`;
+        const occ = (keyOccurrences[baseKey] = (keyOccurrences[baseKey] || 0) + 1);
+        const uniqueCallId = occ > 1 ? `${baseKey}_${occ}` : baseKey;
+
         list.push({
-            _id: sessionId,
+            _id: uniqueCallId,
             sessionId: sessionId,
             callStartTime: startMoment.format('YYYY-MM-DD HH:mm:ss'),
             callStartDate: startMoment.format('YYYY-MM-DD'),
@@ -1175,7 +1182,7 @@ function parseCallReportRows(rawData) {
             csqNames: String(r['CSQ Names'] || '').trim(),
             agentName: agentName,
             ringTimeSec: ringSec,
-            ringTimeFormatted: isRing12 ? '0:00:12' : formatSecondsToHMS(ringSec),
+            ringTimeFormatted: formatSecondsToHMS(ringSec),
             isRing12: isRing12,
             queueTimeSec: queueSec,
             queueTimeFormatted: formatSecondsToHMS(queueSec),
@@ -2389,7 +2396,7 @@ function renderWeeklyComparisonChart(filteredData) {
             }
         },
         yaxis: {
-            title: { text: 'จำนวนสาย Ring 0:00:12', style: { fontSize: '11px', fontWeight: 600 } },
+            title: { text: 'จำนวนสาย Ring ≥ 12s', style: { fontSize: '11px', fontWeight: 600 } },
             forceNiceScale: true,
             min: 0
         },
@@ -2422,7 +2429,7 @@ function renderCallTable(callList) {
         }
 
         const ringBadge = d.isRing12 ?
-            `<span class="ring-12-badge text-xs px-2.5 py-1">🔴 0:00:12</span>` :
+            `<span class="ring-12-badge text-xs px-2.5 py-1">🔴 ${d.ringTimeFormatted}</span>` :
             `<span class="text-gray-700 font-mono">${d.ringTimeFormatted}</span>`;
 
         const remarkCell = isAdmin
