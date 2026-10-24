@@ -9,9 +9,10 @@ const validAgents = new Set(VALID_AGENTS_ARRAY.map(a => a.toLowerCase()));
 
 // Global State
 let currentActiveModule = 'chatSla'; // 'chatSla', 'taskSla', or 'callReport'
-let processedData = []; // Chat SLA data
+let processedData = [];     // Chat SLA data
 let processedTaskData = []; // Task SLA data
 let processedCallData = []; // Call Report data
+let uploadLogs = [];        // Uploaded Excel File Logs in MongoDB
 let selectedAgentNames = new Set();
 let selectedTaskGroups = new Set();
 let selectedCallAgents = new Set();
@@ -22,12 +23,13 @@ let callFilterRing = 'all'; // 'all', '12s', 'normal'
 let callViewMode = 'comparison'; // 'comparison' or 'details'
 let chartInstances = {};
 
-const dbName = "KHelpsSlaDB";
+// Role State ('user' = View Only, 'admin' = Full Edit/Upload/Delete)
+let userRole = 'user';
+let adminPassword = '';
+
 const storeChat = "sessions";
 const storeTask = "task_sla";
 const storeCall = "call_records";
-let db;
-let useCloudDB = false; // Automatically true when Vercel + MongoDB /api/db is active
 
 function filterValidTasks(raw) {
     const seen = new Set();
@@ -42,44 +44,247 @@ function filterValidTasks(raw) {
     });
 }
 
-function updateDbStatusUI(mode) {
-    const badges = [
-        document.getElementById('uploadDbStatusBadge'),
-        document.getElementById('navDbStatusBadge')
-    ];
-    badges.forEach(el => {
-        if (!el) return;
-        if (mode === 'mongodb') {
-            el.className = el.id === 'navDbStatusBadge'
-                ? 'hidden sm:flex items-center gap-1.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-1.5 rounded-lg border border-emerald-200'
-                : 'text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200';
-            el.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>MongoDB Cloud</span>`;
-            el.title = 'เชื่อมต่อฐานข้อมูลออนไลน์ MongoDB Atlas (Vercel) เรียบร้อยแล้ว';
-        } else if (mode === 'unconfigured') {
-            el.className = el.id === 'navDbStatusBadge'
-                ? 'hidden sm:flex items-center gap-1.5 text-[10px] font-semibold bg-amber-50 text-amber-700 px-2.5 py-1.5 rounded-lg border border-amber-200'
-                : 'text-[10px] font-semibold bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-amber-200';
-            el.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span><span>Local DB (No MONGODB_URI)</span>`;
-            el.title = 'ยังไม่ได้ตั้งค่า MONGODB_URI บน Vercel — ระบบใช้ฐานข้อมูลในเครื่องสำรอง';
+function updateDbStatusUI(isConnected, errorText = '') {
+    const el = document.getElementById('navDbStatusBadge');
+    if (!el) return;
+    if (isConnected) {
+        el.className = 'hidden sm:flex items-center gap-1.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-1.5 rounded-lg border border-emerald-200';
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>MongoDB Online</span>`;
+        el.title = 'เชื่อมต่อฐานข้อมูลออนไลน์ MongoDB Atlas เรียบร้อยแล้ว';
+    } else {
+        el.className = 'hidden sm:flex items-center gap-1.5 text-[10px] font-semibold bg-red-50 text-red-700 px-2.5 py-1.5 rounded-lg border border-red-200';
+        el.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span>DB Error</span>`;
+        el.title = errorText || 'ไม่สามารถเชื่อมต่อฐานข้อมูล MongoDB ได้';
+    }
+}
+
+// ─── Role & Permission Management (Admin vs User) ─────────────
+function updateRoleUI() {
+    const isAdmin = userRole === 'admin';
+    const roleBadge = document.getElementById('roleStatusBadge');
+    const toggleBtn = document.getElementById('adminToggleBtn');
+    const adminUploadSec = document.getElementById('adminUploadSection');
+    const userNotice = document.getElementById('userViewOnlyNotice');
+    const clearContainer = document.getElementById('clearDbDropdownContainer');
+    const fileBtnLabel = document.getElementById('fileManagerBtnLabel');
+
+    if (roleBadge) {
+        if (isAdmin) {
+            roleBadge.className = 'text-[10px] font-bold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1';
+            roleBadge.innerHTML = `<span>🛡️ Admin (แก้ไขได้ทั้งหมด)</span>`;
         } else {
-            el.className = el.id === 'navDbStatusBadge'
-                ? 'hidden sm:flex items-center gap-1.5 text-[10px] font-semibold bg-gray-100 text-gray-600 px-2.5 py-1.5 rounded-lg border border-gray-200'
-                : 'text-[10px] font-semibold bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-full flex items-center gap-1';
-            el.innerHTML = `<span class="w-2 h-2 rounded-full bg-gray-400"></span><span>Local DB (Offline)</span>`;
-            el.title = 'โหมดออฟไลน์ (IndexedDB ในเบราว์เซอร์)';
+            roleBadge.className = 'text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 flex items-center gap-1';
+            roleBadge.innerHTML = `<span>👁️ User (ดูอย่างเดียว)</span>`;
         }
+    }
+
+    if (toggleBtn) {
+        if (isAdmin) {
+            toggleBtn.textContent = 'ออกจากระบบ Admin';
+            toggleBtn.className = 'text-[11px] font-semibold text-gray-600 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-lg px-2.5 py-1.5 transition-colors bg-white';
+        } else {
+            toggleBtn.textContent = 'เข้าสู่ระบบ Admin';
+            toggleBtn.className = 'text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg px-3 py-1.5 transition-colors shadow-2xs';
+        }
+    }
+
+    if (adminUploadSec) adminUploadSec.classList.toggle('hidden', !isAdmin);
+    if (userNotice) userNotice.classList.toggle('hidden', isAdmin);
+    if (clearContainer) clearContainer.classList.toggle('hidden', !isAdmin);
+    if (fileBtnLabel) fileBtnLabel.textContent = isAdmin ? 'นำเข้าไฟล์ / Logs' : 'ประวัติไฟล์ (Logs)';
+
+    renderUploadLogsTable();
+    // Refresh current active module view so Remarks inputs toggle between editable & read-only
+    if (currentActiveModule === 'chatSla') updateDashboardView();
+    else if (currentActiveModule === 'taskSla') updateTaskDashboardView();
+    else if (currentActiveModule === 'callReport') updateCallDashboardView();
+}
+
+window.handleRoleToggleClick = function() {
+    if (userRole === 'admin') {
+        userRole = 'user';
+        adminPassword = '';
+        sessionStorage.removeItem('khelps_admin_pass');
+        updateRoleUI();
+    } else {
+        openAdminLoginModal();
+    }
+};
+
+window.openAdminLoginModal = function() {
+    const modal = document.getElementById('adminLoginModal');
+    const input = document.getElementById('adminPasswordInput');
+    const err = document.getElementById('adminLoginError');
+    if (err) err.classList.add('hidden');
+    if (input) input.value = '';
+    if (modal) modal.classList.remove('hidden');
+    setTimeout(() => input?.focus(), 50);
+};
+
+window.closeAdminLoginModal = function() {
+    const modal = document.getElementById('adminLoginModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.handleAdminLoginSubmit = async function(e) {
+    e.preventDefault();
+    const input = document.getElementById('adminPasswordInput');
+    const err = document.getElementById('adminLoginError');
+    const btn = document.getElementById('adminLoginSubmitBtn');
+    const pwd = input ? input.value : '';
+    if (!pwd) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'กำลังตรวจสอบ...';
+    }
+    if (err) err.classList.add('hidden');
+
+    try {
+        const res = await fetch('/api/db', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'verify_admin', password: pwd })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.ok) {
+            userRole = 'admin';
+            adminPassword = pwd;
+            sessionStorage.setItem('khelps_admin_pass', pwd);
+            closeAdminLoginModal();
+            updateRoleUI();
+        } else {
+            if (err) {
+                err.textContent = json.error || 'รหัสผ่าน Admin ไม่ถูกต้อง';
+                err.classList.remove('hidden');
+            }
+        }
+    } catch (error) {
+        if (err) {
+            err.textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์';
+            err.classList.remove('hidden');
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'ยืนยันเข้าสู่ระบบ';
+        }
+    }
+};
+
+// ─── File Manager & Upload Logs Modal ─────────────────────────
+window.openFileManagerModal = function() {
+    renderUploadLogsTable();
+    const modal = document.getElementById('fileManagerModal');
+    if (modal) modal.classList.remove('hidden');
+};
+
+window.closeFileManagerModal = function() {
+    const modal = document.getElementById('fileManagerModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+function renderUploadLogsTable() {
+    const tbody = document.getElementById('uploadLogsTableBody');
+    const empty = document.getElementById('emptyUploadLogsState');
+    const modalCount = document.getElementById('modalFileLogCount');
+    const navCount = document.getElementById('fileLogCountBadge');
+
+    if (modalCount) modalCount.textContent = `${uploadLogs.length} ไฟล์`;
+    if (navCount) navCount.textContent = uploadLogs.length;
+
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!uploadLogs || uploadLogs.length === 0) {
+        if (empty) empty.classList.remove('hidden');
+        return;
+    }
+    if (empty) empty.classList.add('hidden');
+
+    uploadLogs.forEach(log => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50/80 transition-colors';
+
+        let modBadge = '';
+        if (log.moduleType === 'chat' || log.store === 'sessions') {
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">💬 Chat SLA</span>`;
+        } else if (log.moduleType === 'task' || log.store === 'task_sla') {
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">🎫 Task SLA</span>`;
+        } else {
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">📞 Call Ring (CUIC)</span>`;
+        }
+
+        const dtStr = log.uploadedAt ? moment(log.uploadedAt).format('DD/MM/YYYY HH:mm:ss') : '-';
+        const actionHtml = userRole === 'admin'
+            ? `<button type="button" onclick="handleDeleteUploadedFile('${log._id}')" class="text-[11px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg transition-colors inline-flex items-center gap-1">
+                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                   <span>ลบไฟล์และข้อมูล</span>
+               </button>`
+            : `<span class="text-[11px] text-gray-400">🔒 ดูอย่างเดียว</span>`;
+
+        tr.innerHTML = `
+            <td class="px-4 py-3 font-semibold text-gray-800 flex items-center gap-2">
+                <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span class="truncate max-w-[240px]" title="${log.fileName || ''}">${log.fileName || 'Unknown File'}</span>
+            </td>
+            <td class="px-4 py-3">${modBadge}</td>
+            <td class="px-4 py-3 text-center font-bold text-gray-700">${(log.recordCount || 0).toLocaleString()} รายการ</td>
+            <td class="px-4 py-3 text-gray-500 font-mono text-[11px]">${dtStr}</td>
+            <td class="px-4 py-3 text-center">${actionHtml}</td>
+        `;
+        tbody.appendChild(tr);
     });
 }
 
+window.handleDeleteUploadedFile = async function(fileId) {
+    if (userRole !== 'admin') {
+        alert('เฉพาะ Admin เท่านั้นที่สามารถลบไฟล์ได้');
+        return;
+    }
+    const targetLog = uploadLogs.find(l => l._id === fileId);
+    if (!targetLog) return;
+
+    if (!confirm(`⚠️ ยืนยันการลบไฟล์ "${targetLog.fileName}" หรือไม่?\n\nข้อมูลจำนวน ${(targetLog.recordCount || 0).toLocaleString()} รายการที่มาจากไฟล์นี้จะถูกลบออกจากฐานข้อมูล MongoDB ทันที!`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/db?fileId=${encodeURIComponent(fileId)}&store=${encodeURIComponent(targetLog.store || '')}`, {
+            method: 'DELETE',
+            headers: { 'x-admin-password': adminPassword }
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.ok) {
+            throw new Error(json.error || `Delete failed (${res.status})`);
+        }
+
+        await loadDataFromDB();
+        updateNavBadges();
+        renderUploadLogsTable();
+        setupDateFilters();
+        setupTaskDateFilters();
+        setupCallWeekFilters();
+        switchModuleTab(currentActiveModule);
+
+        alert(`✅ ลบไฟล์ "${targetLog.fileName}" และข้อมูลที่เกี่ยวข้องออกจาก MongoDB เรียบร้อยแล้ว`);
+    } catch (err) {
+        alert('เกิดข้อผิดพลาดในการลบไฟล์: ' + err.message);
+    }
+};
+
 // ─── Cloud MongoDB Helpers (Vercel Serverless API) ────────────
 async function saveStoreToCloud(storeName, dataArray) {
-    if (!useCloudDB || !dataArray || !dataArray.length) return;
+    if (!dataArray || !dataArray.length) return;
     const BATCH_SIZE = 400; // Chunk records to stay well below Vercel 4.5MB limit
     for (let i = 0; i < dataArray.length; i += BATCH_SIZE) {
         const chunk = dataArray.slice(i, i + BATCH_SIZE);
         const res = await fetch('/api/db', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-password': adminPassword
+            },
             body: JSON.stringify({ store: storeName, records: chunk })
         });
         if (!res.ok) {
@@ -89,10 +294,25 @@ async function saveStoreToCloud(storeName, dataArray) {
     }
 }
 
+async function saveUploadLogToCloud(logDoc) {
+    const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-admin-password': adminPassword
+        },
+        body: JSON.stringify({ action: 'log_upload', log: logDoc })
+    });
+    if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Failed to save upload log (${res.status})`);
+    }
+}
+
 async function clearStoreInCloud(storeName) {
-    if (!useCloudDB) return;
     const res = await fetch(`/api/db?store=${encodeURIComponent(storeName)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword }
     });
     if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
@@ -100,91 +320,23 @@ async function clearStoreInCloud(storeName) {
     }
 }
 
-// ─── IndexedDB & Hybrid Multi-Store Layer ─────────────────────
-function initDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(dbName, 4);
-        request.onupgradeneeded = e => {
-            const d = e.target.result;
-            if (!d.objectStoreNames.contains(storeChat)) {
-                d.createObjectStore(storeChat, { keyPath: "session_id" });
-            }
-            if (!d.objectStoreNames.contains(storeTask)) {
-                d.createObjectStore(storeTask, { keyPath: "_id" });
-            }
-            if (!d.objectStoreNames.contains(storeCall)) {
-                d.createObjectStore(storeCall, { keyPath: "_id" });
-            }
-        };
-        request.onsuccess = e => { db = e.target.result; resolve(db); };
-        request.onerror  = e => reject(e.target.error);
-    });
-}
-
-async function loadDataFromLocalIDB() {
-    if (!db) return;
-    return new Promise((resolve, reject) => {
-        try {
-            const stores = [storeChat, storeTask];
-            if (db.objectStoreNames.contains(storeCall)) {
-                stores.push(storeCall);
-            }
-            const tx = db.transaction(stores, "readonly");
-            const reqChat = tx.objectStore(storeChat).getAll();
-            const reqTask = tx.objectStore(storeTask).getAll();
-            let reqCall = null;
-            if (db.objectStoreNames.contains(storeCall)) {
-                reqCall = tx.objectStore(storeCall).getAll();
-            }
-
-            reqChat.onsuccess = () => { processedData = reqChat.result || []; };
-            reqTask.onsuccess = () => { processedTaskData = filterValidTasks(reqTask.result || []); };
-            if (reqCall) {
-                reqCall.onsuccess = () => { processedCallData = reqCall.result || []; };
-            }
-
-            tx.oncomplete = () => resolve();
-            tx.onerror = e => reject(e.target.error);
-        } catch (e) {
-            reject(e);
-        }
-    });
-}
-
 async function loadDataFromDB() {
-    // 1. Try MongoDB Cloud API (/api/db) if running on http/https
-    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-        try {
-            const res = await fetch('/api/db', {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-                cache: 'no-store'
-            });
-            if (res.ok) {
-                const json = await res.json();
-                if (json && json.ok) {
-                    useCloudDB = true;
-                    updateDbStatusUI('mongodb');
-                    processedData = json.chatSla || [];
-                    processedTaskData = filterValidTasks(json.taskSla || []);
-                    processedCallData = json.callReport || [];
-                    return;
-                }
-            } else if (res.status === 503) {
-                useCloudDB = false;
-                updateDbStatusUI('unconfigured');
-                await loadDataFromLocalIDB();
-                return;
-            }
-        } catch (err) {
-            console.warn('Cloud API not reachable, falling back to Local IndexedDB:', err.message);
-        }
+    const res = await fetch('/api/db', {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.ok) {
+        updateDbStatusUI(false, json.error || `HTTP ${res.status}`);
+        throw new Error(json.error || `ไม่สามารถดึงข้อมูลจาก MongoDB ได้ (${res.status})`);
     }
 
-    // 2. Fallback to Local IndexedDB
-    useCloudDB = false;
-    updateDbStatusUI('local');
-    await loadDataFromLocalIDB();
+    updateDbStatusUI(true);
+    processedData = json.chatSla || [];
+    processedTaskData = filterValidTasks(json.taskSla || []);
+    processedCallData = json.callReport || [];
+    uploadLogs = json.uploadLogs || [];
 }
 
 window.syncFromCloudDB = async function() {
@@ -193,107 +345,52 @@ window.syncFromCloudDB = async function() {
     try {
         await loadDataFromDB();
         updateNavBadges();
-        if (processedData.length > 0 || processedTaskData.length > 0 || processedCallData.length > 0) {
-            document.getElementById('uploadScreen').classList.add('hidden');
-            document.getElementById('dashboardSection').classList.remove('hidden');
-            switchModuleTab(currentActiveModule);
-        }
+        renderUploadLogsTable();
+        setupDateFilters();
+        setupTaskDateFilters();
+        setupCallWeekFilters();
+        switchModuleTab(currentActiveModule);
     } catch (e) {
-        alert('ไม่สามารถซิงค์ข้อมูลได้: ' + e.message);
+        alert('ไม่สามารถซิงค์ข้อมูลจาก MongoDB ได้: ' + e.message);
     } finally {
         if (btn) btn.classList.remove('opacity-50', 'pointer-events-none');
     }
 };
 
 async function clearChatStore() {
-    if (useCloudDB) await clearStoreInCloud(storeChat);
-    if (!db) return;
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction([storeChat], "readwrite");
-        tx.objectStore(storeChat).clear();
-        tx.oncomplete = () => resolve();
-        tx.onerror = e => reject(e.target.error);
-    });
+    await clearStoreInCloud(storeChat);
 }
 
 async function clearTaskStore() {
-    if (useCloudDB) await clearStoreInCloud(storeTask);
-    if (!db) return;
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction([storeTask], "readwrite");
-        tx.objectStore(storeTask).clear();
-        tx.oncomplete = () => resolve();
-        tx.onerror = e => reject(e.target.error);
-    });
+    await clearStoreInCloud(storeTask);
 }
 
 async function clearCallStore() {
-    if (useCloudDB) await clearStoreInCloud(storeCall);
-    if (!db) return;
-    return new Promise((resolve, reject) => {
-        if (!db.objectStoreNames.contains(storeCall)) { resolve(); return; }
-        const tx = db.transaction([storeCall], "readwrite");
-        tx.objectStore(storeCall).clear();
-        tx.oncomplete = () => resolve();
-        tx.onerror = e => reject(e.target.error);
-    });
+    await clearStoreInCloud(storeCall);
 }
 
 async function saveChatDataToDB(dataArray) {
     if (!dataArray || !dataArray.length) return;
-    if (useCloudDB) await saveStoreToCloud(storeChat, dataArray);
-    if (!db) return;
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction([storeChat], "readwrite");
-        const store = tx.objectStore(storeChat);
-        dataArray.forEach(item => store.put(item));
-        tx.oncomplete = () => resolve();
-        tx.onerror = e => reject(e.target.error);
-    });
+    await saveStoreToCloud(storeChat, dataArray);
 }
 
 async function saveTaskDataToDB(dataArray) {
     if (!dataArray || !dataArray.length) return;
-    if (useCloudDB) await saveStoreToCloud(storeTask, dataArray);
-    if (!db) return;
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction([storeTask], "readwrite");
-        const store = tx.objectStore(storeTask);
-        dataArray.forEach(item => store.put(item));
-        tx.oncomplete = () => resolve();
-        tx.onerror = e => reject(e.target.error);
-    });
+    await saveStoreToCloud(storeTask, dataArray);
 }
 
 async function saveCallDataToDB(dataArray) {
     if (!dataArray || !dataArray.length) return;
-    if (useCloudDB) await saveStoreToCloud(storeCall, dataArray);
-    if (!db) return;
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction([storeCall], "readwrite");
-        const store = tx.objectStore(storeCall);
-        dataArray.forEach(item => store.put(item));
-        tx.oncomplete = () => resolve();
-        tx.onerror = e => reject(e.target.error);
-    });
+    await saveStoreToCloud(storeCall, dataArray);
 }
 
 async function clearAllDB() {
-    if (useCloudDB) await clearStoreInCloud('all');
-    if (!db) return;
-    return new Promise((resolve, reject) => {
-        const stores = [storeChat, storeTask];
-        if (db.objectStoreNames.contains(storeCall)) stores.push(storeCall);
-        const tx = db.transaction(stores, "readwrite");
-        stores.forEach(s => tx.objectStore(s).clear());
-        tx.oncomplete = () => resolve();
-        tx.onerror = e => reject(e.target.error);
-    });
+    await clearStoreInCloud('all');
 }
 
 // ─── DOM Boot ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-    // File input name indicator on upload screen
+    // File input name indicator in File Manager Modal
     const fileInput = document.getElementById('reportFiles');
     const fileDisplay = document.getElementById('fileNameDisplay');
     if (fileInput && fileDisplay) {
@@ -301,46 +398,48 @@ document.addEventListener('DOMContentLoaded', async () => {
             const count = fileInput.files.length;
             if (count > 0) {
                 const names = Array.from(fileInput.files).map(f => f.name).join(', ');
-                fileDisplay.textContent = `${count} file(s) selected: ${names}`;
+                fileDisplay.textContent = `เลือกแล้ว ${count} ไฟล์: ${names}`;
             } else {
                 fileDisplay.textContent = '';
             }
         });
     }
 
-    // 1. Snapshot Mode
-    if (window.INJECTED_DATA || window.INJECTED_SLA_DATA) {
-        if (window.INJECTED_DATA) {
-            processedData = window.INJECTED_DATA.chatSla || [];
-            processedTaskData = window.INJECTED_DATA.taskSla || [];
-            processedCallData = window.INJECTED_DATA.callReport || [];
-        } else {
-            processedData = window.INJECTED_SLA_DATA || [];
+    // Restore Admin session if previously logged in during this browser session
+    const savedPass = sessionStorage.getItem('khelps_admin_pass');
+    if (savedPass) {
+        try {
+            const vRes = await fetch('/api/db', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'verify_admin', password: savedPass })
+            });
+            if (vRes.ok) {
+                userRole = 'admin';
+                adminPassword = savedPass;
+            } else {
+                sessionStorage.removeItem('khelps_admin_pass');
+            }
+        } catch (e) {
+            console.warn('Admin session check failed:', e);
         }
-        showDashboard();
-        return;
     }
+    updateRoleUI();
 
-    // 2. Normal Mode (IndexedDB)
+    // Load online data from MongoDB
     try {
-        await initDB();
         await loadDataFromDB();
-        if (processedData.length > 0 || processedTaskData.length > 0 || processedCallData.length > 0) {
-            showDashboard();
-        }
-    } catch(e) { 
-        console.error("DB init error", e); 
+        showDashboard();
+    } catch (e) {
+        console.error("MongoDB load error:", e);
+        showDashboard();
     }
 
     // Event Listeners for Upload & Controls
-    document.getElementById('processBtn').addEventListener('click', handleDataProcessing);
-    
-    const navFile = document.getElementById('reportFilesNav');
-    if (navFile) navFile.addEventListener('change', () => {
-        if (navFile.files.length) handleDataProcessingFrom(navFile);
-    });
+    const processBtn = document.getElementById('processBtn');
+    if (processBtn) processBtn.addEventListener('click', handleDataProcessing);
 
-    // Clear DB Dropdown & Handlers (Separated per module)
+    // Clear DB Dropdown & Handlers (Separated per module - Admin Only)
     const clearDropdownBtn = document.getElementById('clearDbDropdownBtn');
     const clearDropdownMenu = document.getElementById('clearDbDropdownMenu');
     if (clearDropdownBtn && clearDropdownMenu) {
@@ -382,19 +481,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         handleClearAllData();
     });
 
-    const uploadClearBtn = document.getElementById('clearDbBtn');
-    if (uploadClearBtn) uploadClearBtn.addEventListener('click', handleClearAllData);
-
     const callSearch = document.getElementById('callSearchInput');
     if (callSearch) {
         callSearch.addEventListener('input', () => updateCallDashboardView());
     }
-
-    // Share Dashboard
-    ['shareDashboardBtn', 'shareDashboardBtnNav'].forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) btn.addEventListener('click', exportSnapshot);
-    });
 
     // Chat SLA Filter events
     document.getElementById('applyFilterBtn').addEventListener('click', updateDashboardView);
@@ -443,6 +533,7 @@ function switchModuleTab(moduleName) {
         tabChat?.classList.add('active');
         viewChat?.classList.remove('hidden');
         if (clearBtnText) clearBtnText.textContent = 'Clear Chat DB';
+        setupDateFilters();
         updateDashboardView();
     } else if (moduleName === 'taskSla') {
         tabTask?.classList.add('active');
@@ -482,111 +573,85 @@ function updateNavBadges() {
     if (dropTaskBadge) dropTaskBadge.textContent = processedTaskData.length;
     if (dropCallBadge) dropCallBadge.textContent = processedCallData.length;
 
+    const fileBadge = document.getElementById('fileLogCountBadge');
+    if (fileBadge) fileBadge.textContent = uploadLogs.length;
+
     const ring12sCount = processedCallData.filter(c => c.isRing12).length;
     const pill12sCount = document.getElementById('pill12sCount');
     if (pill12sCount) pill12sCount.textContent = ring12sCount;
 }
 
-// ─── Separate Clear DB Handlers (Protects other tabs) ────────
+// ─── Separate Clear DB Handlers (Admin Only, Protects other tabs) ─
 async function handleClearChatData() {
+    if (userRole !== 'admin') return;
     if (!processedData.length) {
         alert('ไม่มีข้อมูล Chat SLA ในระบบ');
         return;
     }
-    if (!confirm(`ยืนยันการลบข้อมูล Chat SLA ทั้งหมด (${processedData.length.toLocaleString()} รายการ) หรือไม่?\n\n* ข้อมูล Task SLA และ Call Report จะไม่ได้รับผลกระทบ`)) return;
+    if (!confirm(`ยืนยันการลบข้อมูล Chat SLA ทั้งหมด (${processedData.length.toLocaleString()} รายการ) ออกจาก MongoDB หรือไม่?\n\n* ข้อมูล Task SLA และ Call Report จะไม่ได้รับผลกระทบ`)) return;
 
     await clearChatStore();
-    processedData = [];
+    await loadDataFromDB();
     selectedAgentNames.clear();
     updateNavBadges();
-
-    if (processedData.length === 0 && processedTaskData.length === 0 && processedCallData.length === 0) {
-        document.getElementById('dashboardSection').classList.add('hidden');
-        document.getElementById('uploadScreen').classList.remove('hidden');
-    } else {
-        updateDashboardView();
-        if (processedTaskData.length > 0 && currentActiveModule === 'chatSla') {
-            switchModuleTab('taskSla');
-        } else if (processedCallData.length > 0 && currentActiveModule === 'chatSla') {
-            switchModuleTab('callReport');
-        }
-    }
+    renderUploadLogsTable();
+    updateDashboardView();
 }
 
 async function handleClearTaskData() {
+    if (userRole !== 'admin') return;
     if (!processedTaskData.length) {
         alert('ไม่มีข้อมูล Task SLA ในระบบ');
         return;
     }
-    if (!confirm(`ยืนยันการลบข้อมูล Task SLA ทั้งหมด (${processedTaskData.length.toLocaleString()} รายการ) หรือไม่?\n\n* ข้อมูล Chat SLA และ Call Report จะไม่ได้รับผลกระทบ`)) return;
+    if (!confirm(`ยืนยันการลบข้อมูล Task SLA ทั้งหมด (${processedTaskData.length.toLocaleString()} รายการ) ออกจาก MongoDB หรือไม่?\n\n* ข้อมูล Chat SLA และ Call Report จะไม่ได้รับผลกระทบ`)) return;
 
     await clearTaskStore();
-    processedTaskData = [];
+    await loadDataFromDB();
     selectedTaskGroups.clear();
     updateNavBadges();
-
-    if (processedData.length === 0 && processedTaskData.length === 0 && processedCallData.length === 0) {
-        document.getElementById('dashboardSection').classList.add('hidden');
-        document.getElementById('uploadScreen').classList.remove('hidden');
-    } else {
-        updateTaskDashboardView();
-        if (processedData.length > 0 && currentActiveModule === 'taskSla') {
-            switchModuleTab('chatSla');
-        } else if (processedCallData.length > 0 && currentActiveModule === 'taskSla') {
-            switchModuleTab('callReport');
-        }
-    }
+    renderUploadLogsTable();
+    updateTaskDashboardView();
 }
 
 async function handleClearCallData() {
+    if (userRole !== 'admin') return;
     if (!processedCallData.length) {
         alert('ไม่มีข้อมูล Call Report ในระบบ');
         return;
     }
-    if (!confirm(`ยืนยันการลบข้อมูล Call Report ทั้งหมด (${processedCallData.length.toLocaleString()} รายการ) หรือไม่?\n\n* ข้อมูล Chat SLA และ Task SLA จะไม่ได้รับผลกระทบ`)) return;
+    if (!confirm(`ยืนยันการลบข้อมูล Call Report ทั้งหมด (${processedCallData.length.toLocaleString()} รายการ) ออกจาก MongoDB หรือไม่?\n\n* ข้อมูล Chat SLA และ Task SLA จะไม่ได้รับผลกระทบ`)) return;
 
     await clearCallStore();
-    processedCallData = [];
+    await loadDataFromDB();
     selectedCallAgents.clear();
     updateNavBadges();
-
-    if (processedData.length === 0 && processedTaskData.length === 0 && processedCallData.length === 0) {
-        document.getElementById('dashboardSection').classList.add('hidden');
-        document.getElementById('uploadScreen').classList.remove('hidden');
-    } else {
-        updateCallDashboardView();
-        if (processedTaskData.length > 0 && currentActiveModule === 'callReport') {
-            switchModuleTab('taskSla');
-        } else if (processedData.length > 0 && currentActiveModule === 'callReport') {
-            switchModuleTab('chatSla');
-        }
-    }
+    renderUploadLogsTable();
+    updateCallDashboardView();
 }
 
 async function handleClearAllData() {
+    if (userRole !== 'admin') return;
     const total = processedData.length + processedTaskData.length + processedCallData.length;
-    if (total === 0) {
+    if (total === 0 && uploadLogs.length === 0) {
         alert('ไม่มีข้อมูลในฐานข้อมูล');
         return;
     }
-    if (!confirm(`⚠️ ยืนยันการลบข้อมูลทั้งหมดในระบบ?\n- Chat SLA: ${processedData.length.toLocaleString()} รายการ\n- Task SLA: ${processedTaskData.length.toLocaleString()} รายการ\n- Call Report: ${processedCallData.length.toLocaleString()} รายการ\n\nข้อมูลทุกแท็บจะถูกลบทั้งหมด!`)) return;
+    if (!confirm(`⚠️ ยืนยันการลบข้อมูลทั้งหมดใน MongoDB?\n- Chat SLA: ${processedData.length.toLocaleString()} รายการ\n- Task SLA: ${processedTaskData.length.toLocaleString()} รายการ\n- Call Report: ${processedCallData.length.toLocaleString()} รายการ\n\nข้อมูลทุกแท็บและประวัติไฟล์ทั้งหมดจะถูกลบ!`)) return;
 
     await clearAllDB();
-    processedData = [];
-    processedTaskData = [];
-    processedCallData = [];
+    await loadDataFromDB();
     selectedAgentNames.clear();
     selectedTaskGroups.clear();
     selectedCallAgents.clear();
     updateNavBadges();
-    document.getElementById('dashboardSection').classList.add('hidden');
-    document.getElementById('uploadScreen').classList.remove('hidden');
+    renderUploadLogsTable();
+    switchModuleTab(currentActiveModule);
 }
 
 function showDashboard() {
-    document.getElementById('uploadScreen').classList.add('hidden');
-    document.getElementById('dashboardSection').classList.remove('hidden');
     updateNavBadges();
+    renderUploadLogsTable();
 
     // Auto-select tab with data
     if (processedCallData.length > 0 && processedData.length === 0 && processedTaskData.length === 0) {
@@ -595,104 +660,121 @@ function showDashboard() {
         switchModuleTab('taskSla');
     } else {
         switchModuleTab('chatSla');
-        setupDateFilters();
     }
 }
 
-// ─── Smart Data Processing (Auto-Detect Files) ───────────────
+// ─── Smart Data Processing (Auto-Detect Files & Log per File) ─
 async function handleDataProcessing() {
     await handleDataProcessingFrom(document.getElementById('reportFiles'));
 }
 
 async function handleDataProcessingFrom(fileInput) {
+    if (userRole !== 'admin') {
+        alert('เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถนำเข้าไฟล์ได้');
+        return;
+    }
     if (!fileInput || fileInput.files.length === 0) {
-        alert("Please select at least one Excel file.");
+        alert("กรุณาเลือกไฟล์ Excel อย่างน้อย 1 ไฟล์");
         return;
     }
     showLoading(true);
     try {
-        let newChatRecords = [];
-        let newTaskRecords = [];
-        let newCallRecords = [];
+        const existingChatRemarks = {};
+        processedData.forEach(c => { if (c.session_id && c.remark) existingChatRemarks[c.session_id] = c.remark; });
+
+        const existingTaskRemarks = {};
+        processedTaskData.forEach(t => { if (t.Task && t.remark) existingTaskRemarks[t.Task] = t.remark; });
+
+        const existingCallRemarks = {};
+        processedCallData.forEach(c => { if (c._id && c.remark) existingCallRemarks[c._id] = c.remark; });
+
+        let importedFilesSummary = [];
+        let lastImportedModule = null;
 
         for (const file of fileInput.files) {
             const detected = await detectAndProcessFile(file);
-            if (detected.type === 'chat') {
-                newChatRecords = newChatRecords.concat(detected.data);
-            } else if (detected.type === 'task') {
-                newTaskRecords = newTaskRecords.concat(detected.data);
-            } else if (detected.type === 'call') {
-                newCallRecords = newCallRecords.concat(detected.data);
+            if (!detected || detected.type === 'unknown' || !detected.data || detected.data.length === 0) {
+                continue;
             }
-        }
 
-        if (newChatRecords.length > 0) {
-            await saveChatDataToDB(newChatRecords);
-        }
-        if (newTaskRecords.length > 0) {
-            // Preserve existing user remarks if present
-            const existingRemarks = {};
-            processedTaskData.forEach(t => {
-                if (t.Task && t.remark) existingRemarks[t.Task] = t.remark;
+            const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+            let storeName = '';
+            let moduleLabel = '';
+
+            if (detected.type === 'chat') {
+                storeName = storeChat;
+                moduleLabel = 'Chat SLA (≤8m)';
+                lastImportedModule = 'chatSla';
+                detected.data.forEach(rec => {
+                    rec._fileId = fileId;
+                    rec._fileName = file.name;
+                    if (existingChatRemarks[rec.session_id] && !rec.remark) {
+                        rec.remark = existingChatRemarks[rec.session_id];
+                    }
+                });
+            } else if (detected.type === 'task') {
+                storeName = storeTask;
+                moduleLabel = 'Task SLA (Incident)';
+                lastImportedModule = 'taskSla';
+                detected.data.forEach(rec => {
+                    rec._fileId = fileId;
+                    rec._fileName = file.name;
+                    if (existingTaskRemarks[rec.Task] && !rec.remark) {
+                        rec.remark = existingTaskRemarks[rec.Task];
+                    }
+                });
+            } else if (detected.type === 'call') {
+                storeName = storeCall;
+                moduleLabel = 'Call Ring Time (CUIC)';
+                lastImportedModule = 'callReport';
+                detected.data.forEach(rec => {
+                    rec._fileId = fileId;
+                    rec._fileName = file.name;
+                    if (existingCallRemarks[rec._id] && !rec.remark) {
+                        rec.remark = existingCallRemarks[rec._id];
+                    }
+                });
+            }
+
+            // 1. Save tagged records to MongoDB
+            await saveStoreToCloud(storeName, detected.data);
+
+            // 2. Save file import log entry to MongoDB
+            await saveUploadLogToCloud({
+                _id: fileId,
+                fileName: file.name,
+                moduleType: detected.type,
+                moduleLabel: moduleLabel,
+                store: storeName,
+                recordCount: detected.data.length,
+                uploadedAt: new Date().toISOString()
             });
 
-            const seenTasks = new Set();
-            newTaskRecords = newTaskRecords.filter(t => {
-                if (seenTasks.has(t.Task)) return false;
-                seenTasks.add(t.Task);
-                if (existingRemarks[t.Task] && !t.remark) {
-                    t.remark = existingRemarks[t.Task];
-                }
-                return true;
-            });
-
-            await clearTaskStore();
-            await saveTaskDataToDB(newTaskRecords);
-        }
-        if (newCallRecords.length > 0) {
-            // Preserve existing user remarks for calls if present
-            const existingRemarks = {};
-            processedCallData.forEach(c => {
-                if (c._id && c.remark) existingRemarks[c._id] = c.remark;
-            });
-
-            // Merge with existing calls by _id (deduplication across uploads/weeks)
-            const callMap = new Map();
-            processedCallData.forEach(c => callMap.set(c._id, c));
-            newCallRecords.forEach(c => {
-                if (existingRemarks[c._id] && !c.remark) {
-                    c.remark = existingRemarks[c._id];
-                }
-                callMap.set(c._id, c);
-            });
-            const mergedCalls = Array.from(callMap.values());
-
-            await clearCallStore();
-            await saveCallDataToDB(mergedCalls);
+            importedFilesSummary.push(`📄 ${file.name} (${moduleLabel}: ${detected.data.length.toLocaleString()} รายการ)`);
         }
 
         await loadDataFromDB();
+        updateNavBadges();
+        renderUploadLogsTable();
 
-        if (newChatRecords.length > 0 || newTaskRecords.length > 0 || newCallRecords.length > 0) {
-            showDashboard();
-            let summary = [];
-            if (newChatRecords.length) summary.push(`💬 ${newChatRecords.length} Chat SLA records`);
-            if (newTaskRecords.length) summary.push(`🎫 ${newTaskRecords.length} Task SLA records`);
-            if (newCallRecords.length) summary.push(`📞 ${newCallRecords.length} Call Report records`);
-            alert(`Import Successful!\n${summary.join('\n')}`);
-            
-            // Auto switch tab based on imported file types
-            if (newCallRecords.length > 0 && newChatRecords.length === 0 && newTaskRecords.length === 0) {
-                switchModuleTab('callReport');
-            } else if (newTaskRecords.length > 0 && newChatRecords.length === 0) {
-                switchModuleTab('taskSla');
+        // Reset file input
+        fileInput.value = '';
+        const fileDisplay = document.getElementById('fileNameDisplay');
+        if (fileDisplay) fileDisplay.textContent = '';
+
+        if (importedFilesSummary.length > 0) {
+            if (lastImportedModule) {
+                switchModuleTab(lastImportedModule);
+            } else {
+                switchModuleTab(currentActiveModule);
             }
+            alert(`✅ อัปโหลดเข้าฐานข้อมูล MongoDB สำเร็จ!\n\n${importedFilesSummary.join('\n')}`);
         } else {
-            alert("No matching Chat SLA, Task SLA, or Call Report records found in the uploaded file(s).");
+            alert("ไม่พบข้อมูลที่ตรงกับรูปแบบของ Chat SLA, Task SLA หรือ Call Report ในไฟล์ที่เลือก");
         }
     } catch(err) {
         console.error(err);
-        alert("Error while processing: " + err.message);
+        alert("เกิดข้อผิดพลาดในการอัปโหลดไฟล์: " + err.message);
     }
     showLoading(false);
 }
@@ -1352,8 +1434,14 @@ function renderBreachTable(breachData) {
     if (breachData.length === 0) { empty.classList.remove('hidden'); return; }
     empty.classList.add('hidden');
 
+    const isAdmin = userRole === 'admin';
+
     breachData.sort((a, b) => b.responseTime - a.responseTime).forEach(d => {
         const badgeClass = d.responseTime > 20 ? 'high' : 'medium';
+        const remarkCell = isAdmin
+            ? `<input type="text" data-session="${d.session_id}" value="${d.remark || ''}" placeholder="ระบุเหตุผล..." class="remark-input">`
+            : `<span class="text-xs text-gray-600">${d.remark || '-'}</span>`;
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="px-4 py-2.5 text-gray-600">${d.date}</td>
@@ -1362,20 +1450,22 @@ function renderBreachTable(breachData) {
             <td class="px-4 py-2.5 font-medium text-gray-800">${d.agentName}</td>
             <td class="px-4 py-2.5 text-[10px] text-gray-400 font-mono">${d.session_id}</td>
             <td class="px-4 py-2.5"><span class="response-badge ${badgeClass}">${d.responseTime.toFixed(2)} m</span></td>
-            <td class="px-4 py-2.5"><input type="text" data-session="${d.session_id}" value="${d.remark || ''}" placeholder="ระบุเหตุผล..." class="remark-input"></td>
+            <td class="px-4 py-2.5">${remarkCell}</td>
         `;
         tbody.appendChild(tr);
     });
 
-    document.querySelectorAll('#breachTableBody .remark-input').forEach(input => {
-        input.addEventListener('change', async e => {
-            const rec = processedData.find(r => r.session_id === e.target.dataset.session);
-            if (rec) { 
-                rec.remark = e.target.value; 
-                if (!window.INJECTED_DATA && !window.INJECTED_SLA_DATA) await saveChatDataToDB([rec]); 
-            }
+    if (isAdmin) {
+        document.querySelectorAll('#breachTableBody .remark-input').forEach(input => {
+            input.addEventListener('change', async e => {
+                const rec = processedData.find(r => r.session_id === e.target.dataset.session);
+                if (rec) {
+                    rec.remark = e.target.value;
+                    await saveChatDataToDB([rec]);
+                }
+            });
         });
-    });
+    }
 }
 
 function exportToCSV() {
@@ -1708,12 +1798,18 @@ function renderTaskTable(taskList) {
     }
     empty.classList.add('hidden');
 
+    const isAdmin = userRole === 'admin';
+
     taskList.forEach(d => {
         const prioClass = `p${d.PriorityCode}`;
         const pctBadgeClass = d.ElapsedPercentage > 100 ? 'text-red-600 bg-red-50 font-bold' : 'text-emerald-700 bg-emerald-50 font-medium';
         const statusBadge = d.isBreach ? 
             `<span class="status-badge breached"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Over SLA</span>` :
             `<span class="status-badge met"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Within SLA</span>`;
+
+        const remarkCell = isAdmin
+            ? `<input type="text" data-id="${d._id}" data-task="${d.Task}" value="${d.remark || ''}" placeholder="ระบุเหตุผล/หมายเหตุ..." class="remark-input">`
+            : `<span class="text-xs text-gray-600">${d.remark || '-'}</span>`;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -1726,21 +1822,23 @@ function renderTaskTable(taskList) {
             <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded-md text-[10px] ${pctBadgeClass}">${d.ElapsedPercentage.toFixed(1)}%</span></td>
             <td class="px-4 py-2.5">${statusBadge}</td>
             <td class="px-4 py-2.5 text-gray-500 max-w-[200px] truncate" title="${d.ShortDescription}">${d.ShortDescription || '-'}</td>
-            <td class="px-4 py-2.5"><input type="text" data-id="${d._id}" data-task="${d.Task}" value="${d.remark || ''}" placeholder="ระบุเหตุผล/หมายเหตุ..." class="remark-input"></td>
+            <td class="px-4 py-2.5">${remarkCell}</td>
         `;
         tbody.appendChild(tr);
     });
 
-    document.querySelectorAll('#taskTableBody .remark-input').forEach(input => {
-        input.addEventListener('change', async e => {
-            const rowId = e.target.dataset.id;
-            const rec = processedTaskData.find(r => r._id === rowId);
-            if (rec) {
-                rec.remark = e.target.value;
-                if (!window.INJECTED_DATA) await saveTaskDataToDB([rec]);
-            }
+    if (isAdmin) {
+        document.querySelectorAll('#taskTableBody .remark-input').forEach(input => {
+            input.addEventListener('change', async e => {
+                const rowId = e.target.dataset.id;
+                const rec = processedTaskData.find(r => r._id === rowId);
+                if (rec) {
+                    rec.remark = e.target.value;
+                    await saveTaskDataToDB([rec]);
+                }
+            });
         });
-    });
+    }
 }
 
 function exportTaskToCSV() {
@@ -2313,6 +2411,8 @@ function renderCallTable(callList) {
     }
     empty?.classList.add('hidden');
 
+    const isAdmin = userRole === 'admin';
+
     callList.forEach(d => {
         const tr = document.createElement('tr');
         if (d.isRing12) {
@@ -2325,6 +2425,10 @@ function renderCallTable(callList) {
             `<span class="ring-12-badge text-xs px-2.5 py-1">🔴 0:00:12</span>` :
             `<span class="text-gray-700 font-mono">${d.ringTimeFormatted}</span>`;
 
+        const remarkCell = isAdmin
+            ? `<input type="text" data-id="${d._id}" value="${d.remark || ''}" placeholder="ระบุหมายเหตุ..." class="call-remark-input remark-input">`
+            : `<span class="text-xs text-gray-600">${d.remark || '-'}</span>`;
+
         tr.innerHTML = `
             <td class="px-4 py-2.5 font-mono text-[11px] text-gray-700">${d.sessionId}</td>
             <td class="px-4 py-2.5 text-gray-700">${d.callStartDate} <span class="text-[10px] text-gray-400 font-mono">${d.callStartTimeOnly}</span></td>
@@ -2335,21 +2439,23 @@ function renderCallTable(callList) {
             <td class="px-4 py-2.5 text-center">${ringBadge}</td>
             <td class="px-4 py-2.5 font-mono text-gray-600">${d.talkTimeFormatted}</td>
             <td class="px-4 py-2.5 font-mono text-gray-600">${d.workTimeFormatted}</td>
-            <td class="px-4 py-2.5"><input type="text" data-id="${d._id}" value="${d.remark || ''}" placeholder="ระบุหมายเหตุ..." class="call-remark-input remark-input"></td>
+            <td class="px-4 py-2.5">${remarkCell}</td>
         `;
         tbody.appendChild(tr);
     });
 
-    document.querySelectorAll('#callTableBody .call-remark-input').forEach(input => {
-        input.addEventListener('change', async e => {
-            const rowId = e.target.dataset.id;
-            const rec = processedCallData.find(r => r._id === rowId);
-            if (rec) {
-                rec.remark = e.target.value;
-                if (!window.INJECTED_DATA) await saveCallDataToDB([rec]);
-            }
+    if (isAdmin) {
+        document.querySelectorAll('#callTableBody .call-remark-input').forEach(input => {
+            input.addEventListener('change', async e => {
+                const rowId = e.target.dataset.id;
+                const rec = processedCallData.find(r => r._id === rowId);
+                if (rec) {
+                    rec.remark = e.target.value;
+                    await saveCallDataToDB([rec]);
+                }
+            });
         });
-    });
+    }
 }
 
 function exportCallToCSV() {
@@ -2379,48 +2485,6 @@ function exportCallToCSV() {
     a.href = encodeURI("data:text/csv;charset=utf-8," + csv);
     a.download = `CUIC_Call_Ring_Report_${new Date().toISOString().slice(0,10)}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-}
-
-// ─── Shared Snapshot Export ──────────────────────────────────
-function exportSnapshot() {
-    if (!processedData.length && !processedTaskData.length && !processedCallData.length) {
-        alert('No data available to share.');
-        return;
-    }
-    const clone = document.documentElement.cloneNode(true);
-    
-    // Clear dynamic containers
-    const dynamicIds = [
-        'agentSummaryTableBody', 'breachTableBody', 'yearCheckboxes', 'monthCheckboxes', 'dayCheckboxes',
-        'taskGroupListBody', 'taskTableBody', 'taskYearCheckboxes', 'taskMonthCheckboxes', 'taskDayCheckboxes',
-        'callAgentListBody', 'callTableBody', 'callMatrixTbody', 'callMatrixTheadRow'
-    ];
-    dynamicIds.forEach(id => {
-        const el = clone.querySelector(`#${id}`);
-        if (el) el.innerHTML = '';
-    });
-
-    // Clear ApexCharts canvas containers
-    ['dailyTrendChart', 'hourlyBreachChart', 'taskDailyTrendChart', 'taskGroupChart', 'callWeeklyCompChart'].forEach(id => {
-        const el = clone.querySelector(`#${id}`);
-        if (el) { el.innerHTML = ''; el.removeAttribute('style'); }
-    });
-
-    clone.querySelector('#dashboardSection').classList.add('hidden');
-    clone.querySelector('#uploadScreen').classList.remove('hidden');
-
-    const sc = document.createElement('script');
-    sc.textContent = `window.INJECTED_DATA = ${JSON.stringify({ chatSla: processedData, taskSla: processedTaskData, callReport: processedCallData })};`;
-    clone.querySelector('head').appendChild(sc);
-
-    const blob = new Blob([`<!DOCTYPE html>\n${clone.outerHTML}`], { type: 'text/html;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `KHelps_Analytics_Shared_${new Date().toISOString().slice(0,10)}.html`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
-
-    alert("ไฟล์ Shared Dashboard ถูกสร้างและดาวน์โหลดแล้ว!\nเปิดไฟล์นี้ได้ทันทีโดยไม่ต้องต่อฐานข้อมูลครับ");
 }
 
 function animateNumber(id, target) {
