@@ -71,17 +71,36 @@ module.exports = async function handler(req, res) {
         if (req.method === 'GET') {
             const targetStore = req.query?.store;
             if (targetStore && VALID_STORES[targetStore]) {
-                const docs = await db.collection(targetStore).find({}).toArray();
+                const filter = targetStore === 'abandoned_calls'
+                    ? { $or: [{ callSkills: /khelps_expert/i }, { callRoutedCsq: /khelps_expert/i }] }
+                    : {};
+                const docs = await db.collection(targetStore).find(filter).toArray();
                 return res.status(200).json({ ok: true, mode: 'mongodb', data: docs });
             }
+
+            // Ensure abandoned_calls only keeps Khelps_Expert records in DB
+            await db.collection('abandoned_calls').deleteMany({
+                callSkills: { $not: /khelps_expert/i },
+                callRoutedCsq: { $not: /khelps_expert/i }
+            }).catch(() => {});
 
             const [chatSla, taskSla, callReport, abandonedCalls, uploadLogs] = await Promise.all([
                 db.collection('sessions').find({}).toArray(),
                 db.collection('task_sla').find({}).toArray(),
                 db.collection('call_records').find({}).toArray(),
-                db.collection('abandoned_calls').find({}).toArray(),
+                db.collection('abandoned_calls').find({
+                    $or: [{ callSkills: /khelps_expert/i }, { callRoutedCsq: /khelps_expert/i }]
+                }).toArray(),
                 db.collection('upload_logs').find({}).sort({ uploadedAt: -1 }).toArray()
             ]);
+
+            // Sync uploadLogs metadata for abandoned_calls to reflect Khelps_Expert count
+            uploadLogs.forEach(log => {
+                if (log.store === 'abandoned_calls' || log.moduleType === 'abandoned') {
+                    log.moduleLabel = 'Abandoned (Khelps_Expert)';
+                    log.recordCount = abandonedCalls.length;
+                }
+            });
 
             return res.status(200).json({
                 ok: true,
@@ -137,7 +156,14 @@ module.exports = async function handler(req, res) {
             }
 
             const ops = records
-                .filter(doc => doc && doc[keyField])
+                .filter(doc => {
+                    if (!doc || !doc[keyField]) return false;
+                    if (store === 'abandoned_calls') {
+                        const skills = String(doc.callSkills || doc.callRoutedCsq || '').toLowerCase();
+                        return skills.includes('khelps_expert');
+                    }
+                    return true;
+                })
                 .map(doc => {
                     const cleanDoc = { ...doc };
                     if (keyField === 'session_id') {

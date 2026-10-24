@@ -187,7 +187,7 @@
                 </div>
 
                 <!-- NAVIGATION TABS -->
-                <div class="flex items-center bg-gray-100/90 p-1 rounded-xl gap-1">
+                <div class="flex items-center bg-gray-100/90 p-1 rounded-xl gap-1 flex-wrap">
                     <button id="tabBtnChatSla" onclick="switchModuleTab('chatSla')" class="module-tab-btn active px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5">
                         <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
@@ -208,6 +208,13 @@
                         </svg>
                         <span>Call Ring Time (CUIC)</span>
                         <span id="navBadgeCall" class="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold hidden">0</span>
+                    </button>
+                    <button id="tabBtnAbandoned" onclick="switchModuleTab('abandonedCall')" class="module-tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z"/>
+                        </svg>
+                        <span>Abandoned (Khelps_Expert)</span>
+                        <span id="navBadgeAbandoned" class="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold hidden">0</span>
                     </button>
                 </div>
             </div>
@@ -768,7 +775,6 @@
                             <div class="flex items-center gap-1 flex-wrap" id="callRingStatusPills">
                                 <button class="quick-filter-btn active" data-status="all" onclick="setCallRingFilter('all')">ทั้งหมด</button>
                                 <button class="quick-filter-btn text-red-600 font-bold" data-status="12s" onclick="setCallRingFilter('12s')">🔴 Ring ≥ 12s (<span id="pill12sCount">0</span>)</button>
-                                <button class="quick-filter-btn text-amber-600 font-bold" data-status="abandoned" onclick="setCallRingFilter('abandoned')">🟠 Abandoned Call (<span id="pillAbandonedCount">0</span>)</button>
                                 <button class="quick-filter-btn" data-status="normal" onclick="setCallRingFilter('normal')">🟢 ปกติ (< 12s)</button>
                             </div>
                         </div>
@@ -777,16 +783,13 @@
                     <!-- Sub controls: View Mode Tabs + Search + Export -->
                     <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-gray-100">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <!-- Toggle View Mode: Matrix vs Table vs Abandoned -->
+                            <!-- Toggle View Mode: Matrix vs Table -->
                             <div class="flex items-center bg-gray-100 p-0.5 rounded-lg gap-1 text-xs flex-wrap">
                                 <button id="callViewBtnMatrix" onclick="setCallViewMode('comparison')" class="px-3 py-1 rounded-md font-semibold transition-all shadow-2xs bg-white text-purple-700">
                                     📈 ตารางเทียบยอดรายสัปดาห์ (Weekly Matrix)
                                 </button>
                                 <button id="callViewBtnDetails" onclick="setCallViewMode('details')" class="px-3 py-1 rounded-md font-medium transition-all text-gray-600 hover:text-gray-900">
                                     📋 รายการประวัติสาย (Call Records)
-                                </button>
-                                <button id="callViewBtnAbandoned" onclick="setCallViewMode('abandoned')" class="px-3 py-1 rounded-md font-medium transition-all text-amber-700 hover:text-amber-900">
-                                    📵 เทียบสาย Abandoned Call (CUIC Match)
                                 </button>
                             </div>
                         </div>
@@ -833,7 +836,7 @@
                     <div class="flex-1 min-w-0 flex flex-col gap-5">
                         
                         <!-- KPI Cards (Call Ring Time) -->
-                        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5">
+                        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5">
                             <!-- Total Calls -->
                             <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default" data-color="purple">
                                 <div class="flex items-start justify-between">
@@ -860,21 +863,6 @@
                                     </div>
                                 </div>
                                 <div class="mt-2 h-1 w-full bg-red-100 rounded-full overflow-hidden"><div id="call12sBar" class="h-1 bg-red-500 rounded-full" style="width:0%"></div></div>
-                            </div>
-
-                            <!-- Abandoned Calls (<=12s) -->
-                            <div class="kpi-card group bg-white rounded-xl shadow-xs border border-amber-200 p-4 cursor-pointer bg-amber-50/30 hover:bg-amber-50/60 transition-colors" data-color="orange" onclick="setCallViewMode('abandoned')" title="คลิกเพื่อดูตารางเทียบสาย Abandoned Call กับ CUIC">
-                                <div class="flex items-start justify-between">
-                                    <div>
-                                        <p class="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Abandoned Call (≤ 12s)</p>
-                                        <p class="text-2xl font-bold text-amber-700 mt-1 kpi-number" id="callAbandonedCard">0</p>
-                                        <p class="text-[10px] text-amber-600/80 font-medium mt-0.5" id="callAbandonedSubtext">Expert: 0 | CUIC: 0</p>
-                                    </div>
-                                    <div class="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z"/></svg>
-                                    </div>
-                                </div>
-                                <div class="mt-1.5 h-1 w-full bg-amber-100 rounded-full overflow-hidden"><div class="h-1 bg-amber-500 rounded-full w-full"></div></div>
                             </div>
 
                             <!-- Normal Calls (<12s) -->
@@ -1002,111 +990,196 @@
                             </div>
                         </div>
 
-                        <!-- VIEW 3: ABANDONED CALL VS CUIC COMPARISON CONTAINER -->
-                        <div id="callAbandonedViewContainer" class="hidden flex flex-col gap-5">
-                            
-                            <!-- Abandoned Call Report vs CUIC Matching Card -->
-                            <div class="bg-white rounded-xl shadow-xs border border-amber-200 overflow-hidden">
-                                <div class="px-5 py-3.5 bg-amber-50/40 border-b border-amber-100 flex flex-wrap items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2.5">
-                                        <div class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></div>
-                                        <div>
-                                            <h3 class="text-sm font-bold text-gray-900">📵 ตารางเทียบสาย Abandoned Call กับงานใน CUIC (Ring Time ≤ 12 วินาที)</h3>
-                                            <p class="text-[11px] text-gray-500">ตรวจสอบสายที่โทรเข้ามาแล้ววางสายก่อน 12 วินาที หรือเท่ากับ 12 วินาทีพอดี โดยเทียบข้อมูลจากไฟล์ Abandoned Call Detail Activity Report กับ CUIC</p>
-                                        </div>
-                                    </div>
-                                    <span id="abandonedMatchSummaryBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200"></span>
-                                </div>
+                    </div>
+                </div>
+            </div>
 
-                                <!-- Call Skills Filter Bar -->
-                                <div class="px-5 py-3 bg-gray-50/70 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2 flex-wrap">
-                                        <span class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">กรอง Call Skills:</span>
-                                        <div class="flex items-center gap-1.5 flex-wrap" id="abandonedSkillPills">
-                                            <button type="button" class="quick-filter-btn active font-bold text-indigo-700" data-skill="Khelps_Expert" onclick="setAbandonedSkillFilter('Khelps_Expert')">
-                                                🎯 เฉพาะ Khelps_Expert (<span id="abSkillExpertCount">0</span>)
-                                            </button>
-                                            <button type="button" class="quick-filter-btn font-semibold text-emerald-700" data-skill="matched_cuic" onclick="setAbandonedSkillFilter('matched_cuic')">
-                                                ✅ ที่ตรงกับ CUIC (<span id="abSkillMatchedCount">0</span>)
-                                            </button>
-                                            <button type="button" class="quick-filter-btn" data-skill="all" onclick="setAbandonedSkillFilter('all')">
-                                                📋 ทั้งหมดทุก Skills (<span id="abSkillAllCount">0</span>)
-                                            </button>
-                                            <button type="button" class="quick-filter-btn" data-skill="Khelps_Incident" onclick="setAbandonedSkillFilter('Khelps_Incident')">
-                                                Khelps_Incident (<span id="abSkillIncidentCount">0</span>)
-                                            </button>
-                                            <button type="button" class="quick-filter-btn" data-skill="Khelps_8855" onclick="setAbandonedSkillFilter('Khelps_8855')">
-                                                Khelps_8855 (<span id="abSkill8855Count">0</span>)
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="text-[11px] text-gray-500 flex items-center gap-3">
-                                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> วางก่อน 12 วิ (&lt; 12s)</span>
-                                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> วางที่ 12 วิพอดี (= 12s)</span>
-                                    </div>
-                                </div>
 
-                                <!-- Info Banner for Khelps_Expert / Matching context -->
-                                <div id="abandonedContextBanner" class="px-5 py-2.5 bg-indigo-50/50 border-b border-indigo-100 text-xs text-indigo-900"></div>
+            <!-- ============================================================== -->
+            <!-- MODULE 4: ABANDONED CALL (Khelps_Expert ONLY) VIEW             -->
+            <!-- ============================================================== -->
+            <div id="abandonedModuleView" class="module-view hidden">
+                
+                <!-- FILTER & CONTROLS BAR (Abandoned Call - Khelps_Expert) -->
+                <div class="bg-white rounded-xl shadow-xs border border-gray-100 px-5 py-3 mb-5 flex flex-wrap items-center justify-between gap-y-3 gap-x-6">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <div class="flex items-center gap-2 shrink-0">
+                            <svg class="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <span class="text-[11px] font-bold text-gray-700 uppercase tracking-wider">เลือกสัปดาห์ (Week):</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 flex-wrap" id="abandonedWeekPills">
+                            <button class="quick-filter-btn active" data-week="all" onclick="setAbandonedWeekFilter('all')">All Weeks (ผลรวมทั้งหมด)</button>
+                        </div>
+                    </div>
 
-                                <!-- Table 1: Abandoned Report Rows Matched with CUIC -->
-                                <div class="overflow-x-auto custom-scrollbar" style="max-height: 450px;">
-                                    <table class="w-full text-xs whitespace-nowrap">
-                                        <thead class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
-                                            <tr>
-                                                <th class="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">#</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">งานที่ตรงใน CUIC (Session ID)</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Start / Abandon Time</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Skills / CSQ</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call ANI (เบอร์โทร)</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
-                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Time to Abandon</th>
-                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">CUIC Queue Time</th>
-                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-amber-700 uppercase tracking-wider bg-amber-50/60">CUIC Ring Time (≤ 12s)</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="abandonedTableBody" class="divide-y divide-gray-100"></tbody>
-                                    </table>
-                                </div>
-                                <div id="emptyAbandonedTableState" class="hidden p-8 text-center text-xs text-gray-400">
-                                    ไม่พบรายการ Abandoned Call ตามตัวกรองที่เลือก
-                                </div>
-                            </div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <span class="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1.5">
+                            🎯 เฉพาะ Call Skills / CSQ: <span class="underline">Khelps_Expert</span>
+                        </span>
 
-                            <!-- Table 2: CUIC Khelps_Expert & Contact Disposition=1 Reference Table -->
-                            <div class="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden" id="cuicExpertReferenceCard">
-                                <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 bg-purple-50/30">
-                                    <div class="flex items-center gap-2">
-                                        <div class="w-2 h-2 rounded-full bg-purple-600"></div>
-                                        <h3 class="text-sm font-bold text-gray-800" id="cuicRefTableTitle">รายการสาย Khelps_Expert ในไฟล์ CUIC (Ring Time ≤ 12 วินาที)</h3>
-                                        <span id="cuicExpertRefCountBadge" class="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full">0 รายการ</span>
-                                    </div>
-                                    <span class="text-[11px] text-gray-500">ข้อมูลจากไฟล์ CUIC Detailed Call CSQ Agent Report โดยตรง</span>
-                                </div>
-                                <div class="overflow-x-auto custom-scrollbar" style="max-height: 380px;">
-                                    <table class="w-full text-xs whitespace-nowrap">
-                                        <thead class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
-                                            <tr>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">CUIC Session ID</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Start / End Time</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Application / CSQ</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Calling Number (ANI)</th>
-                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
-                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Disposition</th>
-                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Queue Time</th>
-                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-purple-700 uppercase tracking-wider bg-purple-50/50">Ring Time (CUIC)</th>
-                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Talk Time</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="cuicExpertRefTableBody" class="divide-y divide-gray-50"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-
+                        <!-- Search Input -->
+                        <div class="relative w-56">
+                            <input type="text" id="abandonedSearchInput" placeholder="ค้นหา Agent, เบอร์โทร, Session ID..." class="w-full text-xs pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg outline-none focus:border-amber-500 transition-colors bg-gray-50/50">
+                            <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                         </div>
 
+                        <button id="exportAbandonedCsvBtn" onclick="exportAbandonedToCSV()" class="text-[11px] font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3.5 py-1.5 rounded-lg transition-colors shadow-xs flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                            Export CSV
+                        </button>
                     </div>
+                </div>
+
+                <!-- KPI CARDS (Abandoned Khelps_Expert) -->
+                <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5 mb-5">
+                    <!-- Total Abandoned (Khelps_Expert) -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-amber-200 p-4 cursor-default bg-amber-50/20" data-color="orange">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Abandoned (Khelps_Expert)</p>
+                                <p class="text-2xl font-bold text-amber-700 mt-1 kpi-number" id="abTotalExpertCard">0</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1 w-full bg-amber-100 rounded-full overflow-hidden"><div class="h-1 bg-amber-500 rounded-full w-full"></div></div>
+                    </div>
+
+                    <!-- Matched CUIC Session -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default" data-color="green">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">ตรงกับ Session ใน CUIC</p>
+                                <p class="text-2xl font-bold text-emerald-700 mt-1 kpi-number" id="abMatchedCuicCard">0</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1 w-full bg-emerald-100 rounded-full overflow-hidden"><div class="h-1 bg-emerald-500 rounded-full w-full"></div></div>
+                    </div>
+
+                    <!-- Queue Abandon (Ring Time 0s / Before Agent) -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default" data-color="purple">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">วางสายก่อน 12 วิ / ในคิว</p>
+                                <p class="text-2xl font-bold text-indigo-700 mt-1 kpi-number" id="abQueueAbandonCard">0</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1 w-full bg-indigo-100 rounded-full overflow-hidden"><div class="h-1 bg-indigo-500 rounded-full w-full"></div></div>
+                    </div>
+
+                    <!-- Avg Time to Abandon -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default" data-color="red">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Avg Time to Abandon</p>
+                                <p class="text-2xl font-bold text-gray-800 mt-1 kpi-number" id="abAvgWaitCard">0:00:00</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1 w-full bg-red-100 rounded-full overflow-hidden"><div class="h-1 bg-red-500 rounded-full w-full"></div></div>
+                    </div>
+
+                    <!-- CUIC Khelps_Expert Total Calls -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default" data-color="blue">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">งาน Khelps_Expert ใน CUIC</p>
+                                <p class="text-2xl font-bold text-purple-700 mt-1 kpi-number" id="abCuicExpertTotalCard">0</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1 w-full bg-purple-100 rounded-full overflow-hidden"><div class="h-1 bg-purple-500 rounded-full w-full"></div></div>
+                    </div>
+                </div>
+
+                <!-- TABLES CONTAINER (Abandoned Khelps_Expert) -->
+                <div class="flex flex-col gap-5">
+                    
+                    <!-- Table 1: Abandoned Call (Khelps_Expert) vs CUIC Matching -->
+                    <div class="bg-white rounded-xl shadow-xs border border-amber-200 overflow-hidden">
+                        <div class="px-5 py-3.5 bg-amber-50/40 border-b border-amber-100 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></div>
+                                <div>
+                                    <h3 class="text-sm font-bold text-gray-900">📵 รายการสาย Abandoned Call (เฉพาะ Call Skills / CSQ = Khelps_Expert) เทียบกับ CUIC</h3>
+                                    <p class="text-[11px] text-gray-500">แสดงเฉพาะข้อมูลที่มี Call Skills หรือ Call Routed CSQ เป็น <b>Khelps_Expert</b> จากไฟล์ Abandoned Call Detail Activity Report และเทียบหา Ring Time (≤ 12 วินาที) กับไฟล์ CUIC</p>
+                                </div>
+                            </div>
+                            <span id="abandonedMatchSummaryBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200"></span>
+                        </div>
+
+                        <!-- Info Banner for Khelps_Expert context -->
+                        <div id="abandonedContextBanner" class="px-5 py-2.5 bg-indigo-50/50 border-b border-indigo-100 text-xs text-indigo-900"></div>
+
+                        <!-- Table 1 Body -->
+                        <div class="overflow-x-auto custom-scrollbar" style="max-height: 450px;">
+                            <table class="w-full text-xs whitespace-nowrap">
+                                <thead class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
+                                    <tr>
+                                        <th class="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">งานที่ตรงใน CUIC (Session ID)</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Start / Abandon Time</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Week</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Skills / CSQ</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call ANI (เบอร์โทร)</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
+                                        <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Time to Abandon</th>
+                                        <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">CUIC Queue Time</th>
+                                        <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-amber-700 uppercase tracking-wider bg-amber-50/60">CUIC Ring Time (≤ 12s)</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="abandonedTableBody" class="divide-y divide-gray-100"></tbody>
+                            </table>
+                        </div>
+                        <div id="emptyAbandonedTableState" class="hidden p-8 text-center text-xs text-gray-400">
+                            ไม่พบรายการสาย Abandoned Call ของ Skill Khelps_Expert
+                        </div>
+                    </div>
+
+                    <!-- Table 2: CUIC Khelps_Expert Reference Table -->
+                    <div class="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden" id="cuicExpertReferenceCard">
+                        <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 bg-purple-50/30">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-2 rounded-full bg-purple-600"></div>
+                                <h3 class="text-sm font-bold text-gray-800" id="cuicRefTableTitle">รายการงานในไฟล์ CUIC เฉพาะ CSQ / Application = "Khelps_Expert" (แสดง Ring Time)</h3>
+                                <span id="cuicExpertRefCountBadge" class="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full">0 รายการ</span>
+                            </div>
+                            <span class="text-[11px] text-gray-500">ข้อมูลเฉพาะ Skill Khelps_Expert จากไฟล์ CUIC Detailed Call CSQ Agent Report</span>
+                        </div>
+                        <div class="overflow-x-auto custom-scrollbar" style="max-height: 400px;">
+                            <table class="w-full text-xs whitespace-nowrap">
+                                <thead class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
+                                    <tr>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">CUIC Session ID</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Start / End Time</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Week</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Application / CSQ</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Calling Number (ANI)</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Called Number</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
+                                        <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Disposition</th>
+                                        <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Queue Time</th>
+                                        <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-purple-700 uppercase tracking-wider bg-purple-50/50">Ring Time (CUIC)</th>
+                                        <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Talk Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cuicExpertRefTableBody" class="divide-y divide-gray-50"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 

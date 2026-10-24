@@ -20,9 +20,9 @@ let selectedCallAgents = new Set();
 let taskFilterPriority = 'all';
 let taskFilterOutcome = 'all';
 let callFilterWeek = 'all'; // 'all' or weekKey (e.g. '2026-W40')
-let callFilterRing = 'all'; // 'all', '12s', 'abandoned', 'normal'
-let callViewMode = 'comparison'; // 'comparison', 'details', or 'abandoned'
-let abandonedSkillFilter = 'Khelps_Expert'; // 'Khelps_Expert', 'matched_cuic', 'all', 'Khelps_Incident', 'Khelps_8855'
+let callFilterRing = 'all'; // 'all', '12s', 'normal'
+let callViewMode = 'comparison'; // 'comparison' or 'details'
+let abandonedFilterWeek = 'all'; // 'all' or weekKey (for Abandoned Khelps_Expert tab)
 let chartInstances = {};
 
 // Call Table Pagination State (for fast UI rendering)
@@ -106,6 +106,7 @@ function updateRoleUI() {
     if (currentActiveModule === 'chatSla') updateDashboardView();
     else if (currentActiveModule === 'taskSla') updateTaskDashboardView();
     else if (currentActiveModule === 'callReport') updateCallDashboardView();
+    else if (currentActiveModule === 'abandonedCall') updateAbandonedDashboardView();
 }
 
 window.handleRoleToggleClick = function() {
@@ -275,6 +276,7 @@ window.handleDeleteUploadedFile = async function(fileId) {
         setupDateFilters();
         setupTaskDateFilters();
         setupCallWeekFilters();
+        setupAbandonedWeekFilters();
         switchModuleTab(currentActiveModule);
 
         alert(`✅ ลบไฟล์ "${targetLog.fileName}" และข้อมูลที่เกี่ยวข้องออกจาก MongoDB เรียบร้อยแล้ว`);
@@ -346,7 +348,11 @@ async function loadDataFromDB() {
     processedData = json.chatSla || [];
     processedTaskData = filterValidTasks(json.taskSla || []);
     processedCallData = json.callReport || [];
-    processedAbandonedData = json.abandonedCalls || [];
+    // เอาเฉพาะ Call Skills / CSQ ที่เป็น Khelps_Expert เท่านั้น
+    processedAbandonedData = (json.abandonedCalls || []).filter(d => {
+        const sk = String(d.callSkills || d.callRoutedCsq || '').toLowerCase();
+        return sk.includes('khelps_expert');
+    });
     uploadLogs = json.uploadLogs || [];
     enrichAbandonedWithCuic();
 }
@@ -361,6 +367,7 @@ window.syncFromCloudDB = async function() {
         setupDateFilters();
         setupTaskDateFilters();
         setupCallWeekFilters();
+        setupAbandonedWeekFilters();
         switchModuleTab(currentActiveModule);
     } catch (e) {
         alert('ไม่สามารถซิงค์ข้อมูลจาก MongoDB ได้: ' + e.message);
@@ -516,6 +523,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    const abSearch = document.getElementById('abandonedSearchInput');
+    if (abSearch) {
+        abSearch.addEventListener('input', () => {
+            updateAbandonedDashboardView();
+        });
+    }
+
     // Chat SLA Filter events
     document.getElementById('applyFilterBtn').addEventListener('click', updateDashboardView);
     document.getElementById('clearFilterBtn').addEventListener('click', () => {
@@ -551,13 +565,15 @@ function switchModuleTab(moduleName) {
     const tabChat = document.getElementById('tabBtnChatSla');
     const tabTask = document.getElementById('tabBtnTaskSla');
     const tabCall = document.getElementById('tabBtnCallReport');
+    const tabAbandoned = document.getElementById('tabBtnAbandoned');
     const viewChat = document.getElementById('chatSlaModuleView');
     const viewTask = document.getElementById('taskSlaModuleView');
     const viewCall = document.getElementById('callReportModuleView');
+    const viewAbandoned = document.getElementById('abandonedModuleView');
     const clearBtnText = document.getElementById('clearDbBtnText');
 
-    [tabChat, tabTask, tabCall].forEach(t => t?.classList.remove('active'));
-    [viewChat, viewTask, viewCall].forEach(v => v?.classList.add('hidden'));
+    [tabChat, tabTask, tabCall, tabAbandoned].forEach(t => t?.classList.remove('active'));
+    [viewChat, viewTask, viewCall, viewAbandoned].forEach(v => v?.classList.add('hidden'));
 
     if (moduleName === 'chatSla') {
         tabChat?.classList.add('active');
@@ -577,6 +593,12 @@ function switchModuleTab(moduleName) {
         if (clearBtnText) clearBtnText.textContent = 'Clear Call DB';
         setupCallWeekFilters();
         updateCallDashboardView();
+    } else if (moduleName === 'abandonedCall') {
+        tabAbandoned?.classList.add('active');
+        viewAbandoned?.classList.remove('hidden');
+        if (clearBtnText) clearBtnText.textContent = 'Clear Abandoned DB';
+        setupAbandonedWeekFilters();
+        updateAbandonedDashboardView();
     }
 }
 
@@ -584,6 +606,7 @@ function updateNavBadges() {
     const chatBadge = document.getElementById('navBadgeChat');
     const taskBadge = document.getElementById('navBadgeTask');
     const callBadge = document.getElementById('navBadgeCall');
+    const abBadge = document.getElementById('navBadgeAbandoned');
     if (chatBadge) {
         chatBadge.textContent = processedData.length;
         chatBadge.classList.toggle('hidden', processedData.length === 0);
@@ -595,6 +618,10 @@ function updateNavBadges() {
     if (callBadge) {
         callBadge.textContent = processedCallData.length;
         callBadge.classList.toggle('hidden', processedCallData.length === 0);
+    }
+    if (abBadge) {
+        abBadge.textContent = processedAbandonedData.length;
+        abBadge.classList.toggle('hidden', processedAbandonedData.length === 0);
     }
     const dropChatBadge = document.getElementById('clearChatCountBadge');
     const dropTaskBadge = document.getElementById('clearTaskCountBadge');
@@ -611,9 +638,6 @@ function updateNavBadges() {
     const ring12sCount = processedCallData.filter(c => c.isRing12).length;
     const pill12sCount = document.getElementById('pill12sCount');
     if (pill12sCount) pill12sCount.textContent = ring12sCount;
-
-    const pillAbandonedCount = document.getElementById('pillAbandonedCount');
-    if (pillAbandonedCount) pillAbandonedCount.textContent = processedAbandonedData.length;
 }
 
 // ─── Separate Clear DB Handlers (Admin Only, Protects other tabs) ─
@@ -668,16 +692,17 @@ async function handleClearCallData() {
 async function handleClearAbandonedData() {
     if (userRole !== 'admin') return;
     if (!processedAbandonedData.length) {
-        alert('ไม่มีข้อมูล Abandoned Call ในระบบ');
+        alert('ไม่มีข้อมูล Abandoned Call (Khelps_Expert) ในระบบ');
         return;
     }
-    if (!confirm(`ยืนยันการลบข้อมูล Abandoned Call ทั้งหมด (${processedAbandonedData.length.toLocaleString()} รายการ) ออกจาก MongoDB หรือไม่?\n\n* ข้อมูลส่วนอื่นจะไม่ได้รับผลกระทบ`)) return;
+    if (!confirm(`ยืนยันการลบข้อมูล Abandoned Call (Khelps_Expert) ทั้งหมด (${processedAbandonedData.length.toLocaleString()} รายการ) ออกจาก MongoDB หรือไม่?\n\n* ข้อมูลส่วนอื่นจะไม่ได้รับผลกระทบ`)) return;
 
     await clearAbandonedStore();
     await loadDataFromDB();
     updateNavBadges();
     renderUploadLogsTable();
-    updateCallDashboardView();
+    setupAbandonedWeekFilters();
+    updateAbandonedDashboardView();
 }
 
 async function handleClearAllData() {
@@ -687,7 +712,7 @@ async function handleClearAllData() {
         alert('ไม่มีข้อมูลในฐานข้อมูล');
         return;
     }
-    if (!confirm(`⚠️ ยืนยันการลบข้อมูลทั้งหมดใน MongoDB?\n- Chat SLA: ${processedData.length.toLocaleString()} รายการ\n- Task SLA: ${processedTaskData.length.toLocaleString()} รายการ\n- Call Report: ${processedCallData.length.toLocaleString()} รายการ\n- Abandoned Call: ${processedAbandonedData.length.toLocaleString()} รายการ\n\nข้อมูลทุกแท็บและประวัติไฟล์ทั้งหมดจะถูกลบ!`)) return;
+    if (!confirm(`⚠️ ยืนยันการลบข้อมูลทั้งหมดใน MongoDB?\n- Chat SLA: ${processedData.length.toLocaleString()} รายการ\n- Task SLA: ${processedTaskData.length.toLocaleString()} รายการ\n- Call Report: ${processedCallData.length.toLocaleString()} รายการ\n- Abandoned (Khelps_Expert): ${processedAbandonedData.length.toLocaleString()} รายการ\n\nข้อมูลทุกแท็บและประวัติไฟล์ทั้งหมดจะถูกลบ!`)) return;
 
     await clearAllDB();
     await loadDataFromDB();
@@ -704,8 +729,10 @@ function showDashboard() {
     renderUploadLogsTable();
 
     // Auto-select tab with data
-    if ((processedCallData.length > 0 || processedAbandonedData.length > 0) && processedData.length === 0 && processedTaskData.length === 0) {
+    if (processedCallData.length > 0 && processedData.length === 0 && processedTaskData.length === 0) {
         switchModuleTab('callReport');
+    } else if (processedAbandonedData.length > 0 && processedData.length === 0 && processedTaskData.length === 0 && processedCallData.length === 0) {
+        switchModuleTab('abandonedCall');
     } else if (processedTaskData.length > 0 && processedData.length === 0) {
         switchModuleTab('taskSla');
     } else {
@@ -743,7 +770,6 @@ async function handleDataProcessingFrom(fileInput) {
 
         let importedFilesSummary = [];
         let lastImportedModule = null;
-        let importedAbandoned = false;
 
         for (const file of fileInput.files) {
             const detected = await detectAndProcessFile(file);
@@ -790,9 +816,8 @@ async function handleDataProcessingFrom(fileInput) {
                 });
             } else if (detected.type === 'abandoned') {
                 storeName = storeAbandoned;
-                moduleLabel = 'Abandoned Call Report';
-                lastImportedModule = 'callReport';
-                importedAbandoned = true;
+                moduleLabel = 'Abandoned (Khelps_Expert)';
+                lastImportedModule = 'abandonedCall';
                 detected.data.forEach(rec => {
                     rec._fileId = fileId;
                     rec._fileName = file.name;
@@ -834,12 +859,9 @@ async function handleDataProcessingFrom(fileInput) {
             } else {
                 switchModuleTab(currentActiveModule);
             }
-            if (importedAbandoned) {
-                setCallViewMode('abandoned');
-            }
             alert(`✅ อัปโหลดเข้าฐานข้อมูล MongoDB สำเร็จ!\n\n${importedFilesSummary.join('\n')}`);
         } else {
-            alert("ไม่พบข้อมูลที่ตรงกับรูปแบบของ Chat SLA, Task SLA, Call Report หรือ Abandoned Call Report ในไฟล์ที่เลือก");
+            alert("ไม่พบข้อมูลที่ตรงกับรูปแบบของ Chat SLA, Task SLA, Call Report หรือ Abandoned Call (Khelps_Expert) ในไฟล์ที่เลือก");
         }
     } catch(err) {
         console.error(err);
@@ -1307,6 +1329,12 @@ function parseAbandonedReportRows(rawData) {
         const callAni = String(r['Call ANI'] || '').trim();
         const callRoutedCsq = String(r['Call Routed CSQ'] || '').trim();
         const callSkills = String(r['Call Skills'] || callRoutedCsq || '').trim();
+
+        // กรองเอาเฉพาะ Call Skills / CSQ ที่เป็น Khelps_Expert อย่างเดียว
+        if (!callSkills.toLowerCase().includes('khelps_expert') && !callRoutedCsq.toLowerCase().includes('khelps_expert')) {
+            return;
+        }
+
         const calledNumber = String(r['Called Number'] || '').trim();
         const timeToAbandonSec = parseDurationToSeconds(r['Average Time to Abandoned']);
         const timeToAbandonFormatted = formatSecondsToHMS(timeToAbandonSec);
@@ -2141,13 +2169,6 @@ window.setCallRingFilter = function(status) {
     buttons.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.status === status);
     });
-    if (status === 'abandoned') {
-        setCallViewMode('abandoned');
-        return;
-    } else if (callViewMode === 'abandoned') {
-        setCallViewMode('details');
-        return;
-    }
     updateCallDashboardView();
 };
 
@@ -2156,25 +2177,19 @@ window.setCallViewMode = function(mode) {
     callViewMode = mode;
     const btnMatrix = document.getElementById('callViewBtnMatrix');
     const btnDetails = document.getElementById('callViewBtnDetails');
-    const btnAbandoned = document.getElementById('callViewBtnAbandoned');
     const viewMatrix = document.getElementById('callMatrixViewContainer');
     const viewDetails = document.getElementById('callDetailsViewContainer');
-    const viewAbandoned = document.getElementById('callAbandonedViewContainer');
 
-    [btnMatrix, btnDetails, btnAbandoned].forEach(b => {
-        b?.classList.remove('bg-white', 'text-purple-700', 'text-amber-700', 'shadow-2xs', 'font-semibold');
+    [btnMatrix, btnDetails].forEach(b => {
+        b?.classList.remove('bg-white', 'text-purple-700', 'shadow-2xs', 'font-semibold');
         b?.classList.add('text-gray-600', 'font-medium');
     });
-    [viewMatrix, viewDetails, viewAbandoned].forEach(v => v?.classList.add('hidden'));
+    [viewMatrix, viewDetails].forEach(v => v?.classList.add('hidden'));
 
     if (mode === 'comparison') {
         btnMatrix?.classList.add('bg-white', 'text-purple-700', 'shadow-2xs', 'font-semibold');
         btnMatrix?.classList.remove('text-gray-600', 'font-medium');
         viewMatrix?.classList.remove('hidden');
-    } else if (mode === 'abandoned') {
-        btnAbandoned?.classList.add('bg-white', 'text-amber-700', 'shadow-2xs', 'font-semibold');
-        btnAbandoned?.classList.remove('text-gray-600', 'font-medium');
-        viewAbandoned?.classList.remove('hidden');
     } else {
         btnDetails?.classList.add('bg-white', 'text-purple-700', 'shadow-2xs', 'font-semibold');
         btnDetails?.classList.remove('text-gray-600', 'font-medium');
@@ -2195,29 +2210,18 @@ window.gotoCallTablePage = function(page) {
     renderCallTable(lastFilteredCallList);
 };
 
-window.setAbandonedSkillFilter = function(skill) {
-    abandonedSkillFilter = skill;
-    const buttons = document.querySelectorAll('#abandonedSkillPills button');
-    buttons.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.skill === skill);
-    });
-    renderAbandonedComparisonView();
-};
-
 function updateCallDashboardView() {
     enrichAbandonedWithCuic();
 
-    if (!processedCallData.length && !processedAbandonedData.length) {
+    if (!processedCallData.length) {
         animateNumber('callTotalCard', 0);
         animateNumber('call12sCard', 0);
-        animateNumber('callAbandonedCard', 0);
         animateNumber('callNormalCard', 0);
         document.getElementById('call12sRateCard').textContent = '0%';
         document.getElementById('callAvgRingCard').textContent = '0s';
         renderCallAgentSidebar([]);
         renderWeeklyComparisonMatrix([]);
         renderCallTable([]);
-        renderAbandonedComparisonView();
         return;
     }
 
@@ -2247,8 +2251,6 @@ function updateCallDashboardView() {
     // Filter by Ring status
     if (callFilterRing === '12s') {
         filtered = filtered.filter(d => d.isRing12);
-    } else if (callFilterRing === 'abandoned') {
-        filtered = filtered.filter(d => d.isMatchedAbandonedReport || d.isCuicAbandoned);
     } else if (callFilterRing === 'normal') {
         filtered = filtered.filter(d => !d.isRing12);
     }
@@ -2271,25 +2273,11 @@ function updateCallDashboardView() {
     const totalRingSec = filtered.reduce((sum, d) => sum + d.ringTimeSec, 0);
     const avgRingSec = total > 0 ? (totalRingSec / total).toFixed(1) : 0;
 
-    // Abandoned KPI calculation
-    let abWeekFiltered = processedAbandonedData;
-    if (callFilterWeek !== 'all') {
-        abWeekFiltered = abWeekFiltered.filter(d => d.weekKey === callFilterWeek);
-    }
-    const abExpertCount = abWeekFiltered.filter(d => d.callSkills.toLowerCase().includes('khelps_expert')).length;
-    const abMatchedCount = abWeekFiltered.filter(d => d.isMatchedCuic).length;
-
     animateNumber('callTotalCard', total);
     animateNumber('call12sCard', ring12Count);
-    animateNumber('callAbandonedCard', abWeekFiltered.length);
     animateNumber('callNormalCard', normalCount);
     document.getElementById('call12sRateCard').textContent = `${ring12Pct.toFixed(1)}%`;
     document.getElementById('callAvgRingCard').textContent = `${avgRingSec}s`;
-
-    const abSubtext = document.getElementById('callAbandonedSubtext');
-    if (abSubtext) {
-        abSubtext.textContent = `Khelps_Expert: ${abExpertCount} | ตรง CUIC: ${abMatchedCount}`;
-    }
 
     const setBar = (id, pct) => { const el = document.getElementById(id); if(el) el.style.width = pct + '%'; };
     setBar('call12sBar', ring12Pct);
@@ -2301,9 +2289,6 @@ function updateCallDashboardView() {
     const pill12sCount = document.getElementById('pill12sCount');
     if (pill12sCount) pill12sCount.textContent = totalRing12InWeek;
 
-    const pillAbandonedCount = document.getElementById('pillAbandonedCount');
-    if (pillAbandonedCount) pillAbandonedCount.textContent = abWeekFiltered.length;
-
     // Badges
     const matrixBadge = document.getElementById('callMatrixCountBadge');
     if (matrixBadge) matrixBadge.textContent = `${total} calls`;
@@ -2314,8 +2299,6 @@ function updateCallDashboardView() {
     if (callViewMode === 'comparison') {
         renderWeeklyComparisonMatrix(filtered);
         renderWeeklyComparisonChart(filtered);
-    } else if (callViewMode === 'abandoned') {
-        renderAbandonedComparisonView();
     } else {
         renderCallTable(filtered);
     }
@@ -2783,7 +2766,57 @@ function renderCallTable(callList) {
     }
 }
 
-function renderAbandonedComparisonView() {
+// ─── MODULE 4: Abandoned Call (Khelps_Expert Only) UI & Logic ─
+function isExpertSkillRecord(d) {
+    const sk = String(d.callSkills || d.callRoutedCsq || '').toLowerCase();
+    return sk.includes('khelps_expert');
+}
+
+function isCuicExpertRecord(c) {
+    const app = String(c.applicationName || '').toLowerCase();
+    const csq = String(c.csqNames || '').toLowerCase();
+    const called = String(c.calledNumber || '').trim();
+    return app.includes('khelps_expert') || csq.includes('khelps_expert') || called === '14903';
+}
+
+function setupAbandonedWeekFilters() {
+    const container = document.getElementById('abandonedWeekPills');
+    if (!container) return;
+
+    const weekMap = new Map();
+    // Collect weeks from Khelps_Expert Abandoned rows and Khelps_Expert CUIC rows
+    processedAbandonedData.filter(isExpertSkillRecord).forEach(d => {
+        if (!weekMap.has(d.weekKey)) {
+            weekMap.set(d.weekKey, { key: d.weekKey, label: d.weekLabel || d.weekKey, abCount: 0 });
+        }
+        weekMap.get(d.weekKey).abCount++;
+    });
+
+    processedCallData.filter(isCuicExpertRecord).forEach(c => {
+        if (!weekMap.has(c.weekKey)) {
+            weekMap.set(c.weekKey, { key: c.weekKey, label: c.weekLabel || c.weekKey, abCount: 0 });
+        }
+    });
+
+    const sortedWeeks = Array.from(weekMap.values()).sort((a, b) => a.key.localeCompare(b.key));
+
+    let html = `<button class="quick-filter-btn ${abandonedFilterWeek === 'all' ? 'active' : ''}" data-week="all" onclick="setAbandonedWeekFilter('all')">All Weeks (ผลรวมทั้งหมด)</button>`;
+    sortedWeeks.forEach(w => {
+        const badge = w.abCount > 0 ? ` <span class="text-amber-700 font-bold">(${w.abCount} 📵)</span>` : '';
+        html += `<button class="quick-filter-btn ${abandonedFilterWeek === w.key ? 'active' : ''}" data-week="${w.key}" onclick="setAbandonedWeekFilter('${w.key}')">${w.label}${badge}</button>`;
+    });
+    container.innerHTML = html;
+}
+
+window.setAbandonedWeekFilter = function(weekKey) {
+    abandonedFilterWeek = weekKey;
+    setupAbandonedWeekFilters();
+    updateAbandonedDashboardView();
+};
+
+function updateAbandonedDashboardView() {
+    enrichAbandonedWithCuic();
+
     const tbody = document.getElementById('abandonedTableBody');
     const empty = document.getElementById('emptyAbandonedTableState');
     const banner = document.getElementById('abandonedContextBanner');
@@ -2795,83 +2828,75 @@ function renderAbandonedComparisonView() {
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    const searchQuery = (document.getElementById('callSearchInput')?.value || '').trim().toLowerCase();
+    const searchQuery = (document.getElementById('abandonedSearchInput')?.value || '').trim().toLowerCase();
 
-    let baseAb = processedAbandonedData;
-    if (callFilterWeek !== 'all') {
-        baseAb = baseAb.filter(d => d.weekKey === callFilterWeek);
+    // 1. กรองเฉพาะ Call Skills / CSQ = Khelps_Expert เท่านั้น
+    let expertAbList = processedAbandonedData.filter(isExpertSkillRecord);
+    if (abandonedFilterWeek !== 'all') {
+        expertAbList = expertAbList.filter(d => d.weekKey === abandonedFilterWeek);
     }
 
-    // Update skill pill counts
-    const expertList = baseAb.filter(d => d.callSkills.toLowerCase().includes('khelps_expert'));
-    const matchedList = baseAb.filter(d => d.isMatchedCuic);
-    const incidentList = baseAb.filter(d => d.callSkills.toLowerCase().includes('khelps_incident'));
-    const c8855List = baseAb.filter(d => d.callSkills.toLowerCase().includes('khelps_8855'));
-
-    const setElText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-    setElText('abSkillExpertCount', expertList.length);
-    setElText('abSkillMatchedCount', matchedList.length);
-    setElText('abSkillAllCount', baseAb.length);
-    setElText('abSkillIncidentCount', incidentList.length);
-    setElText('abSkill8855Count', c8855List.length);
-
-    if (summaryBadge) {
-        summaryBadge.textContent = `Abandoned ทั้งหมด: ${baseAb.length} สาย | Khelps_Expert: ${expertList.length} สาย | ตรงกับ CUIC: ${matchedList.length} สาย`;
+    // 2. กรองข้อมูล CUIC เฉพาะ CSQ / Application = Khelps_Expert เท่านั้น
+    let cuicExpertList = processedCallData.filter(isCuicExpertRecord);
+    if (abandonedFilterWeek !== 'all') {
+        cuicExpertList = cuicExpertList.filter(c => c.weekKey === abandonedFilterWeek);
     }
 
-    // Filter by selected Call Skills pill
-    let filteredAb = baseAb;
-    if (abandonedSkillFilter === 'Khelps_Expert') {
-        filteredAb = expertList;
-    } else if (abandonedSkillFilter === 'matched_cuic') {
-        filteredAb = matchedList;
-    } else if (abandonedSkillFilter === 'Khelps_Incident') {
-        filteredAb = incidentList;
-    } else if (abandonedSkillFilter === 'Khelps_8855') {
-        filteredAb = c8855List;
-    }
-
-    // Filter by search query
+    // Search filter
     if (searchQuery) {
-        filteredAb = filteredAb.filter(d =>
+        expertAbList = expertAbList.filter(d =>
             d.agentName.toLowerCase().includes(searchQuery) ||
             d.callAni.toLowerCase().includes(searchQuery) ||
             d.callSkills.toLowerCase().includes(searchQuery) ||
             (d.cuicSessionId && d.cuicSessionId.toLowerCase().includes(searchQuery))
         );
+        cuicExpertList = cuicExpertList.filter(c =>
+            c.agentName.toLowerCase().includes(searchQuery) ||
+            c.callingNumber.toLowerCase().includes(searchQuery) ||
+            c.sessionId.toLowerCase().includes(searchQuery) ||
+            c.csqNames.toLowerCase().includes(searchQuery)
+        );
     }
 
-    // Context Banner explanation
+    // KPI Metrics (Khelps_Expert Only)
+    const totalExpertAb = expertAbList.length;
+    const matchedExpertAb = expertAbList.filter(d => d.isMatchedCuic).length;
+    const queueAbandonCount = expertAbList.filter(d => !d.isMatchedCuic || (d.cuicRingTimeSec !== null && d.cuicRingTimeSec <= 12)).length;
+    const avgWaitSec = totalExpertAb > 0
+        ? Math.round(expertAbList.reduce((s, d) => s + (d.timeToAbandonSec || 0), 0) / totalExpertAb)
+        : 0;
+
+    animateNumber('abTotalExpertCard', totalExpertAb);
+    animateNumber('abMatchedCuicCard', matchedExpertAb);
+    animateNumber('abQueueAbandonCard', queueAbandonCount);
+    const avgWaitEl = document.getElementById('abAvgWaitCard');
+    if (avgWaitEl) avgWaitEl.textContent = formatSecondsToHMS(avgWaitSec);
+    animateNumber('abCuicExpertTotalCard', cuicExpertList.length);
+
+    if (summaryBadge) {
+        summaryBadge.textContent = `Khelps_Expert Abandoned: ${totalExpertAb} สาย | งาน Khelps_Expert ใน CUIC: ${cuicExpertList.length} สาย`;
+    }
+
+    // Context Banner explanation for Khelps_Expert
     if (banner) {
-        const matchedLt12 = matchedList.filter(d => d.cuicRingTimeSec !== null && d.cuicRingTimeSec < 12).length;
-        const matchedEq12 = matchedList.filter(d => d.cuicRingTimeSec === 12).length;
-        if (abandonedSkillFilter === 'Khelps_Expert') {
+        if (expertAbList.length > 0) {
+            const first = expertAbList[0];
             banner.innerHTML = `
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <div>
-                        <b>🎯 เงื่อนไข Call Skills = <span class="text-indigo-700 underline">Khelps_Expert</span>:</b>
-                        พบในไฟล์ Abandoned Call จำนวน <b>${expertList.length} รายการ</b>
-                        ${expertList.length > 0 && !expertList[0].isMatchedCuic
-                            ? `(เบอร์ <b>${expertList[0].callAni}</b> เวลา <b>${expertList[0].callStartDate} ${expertList[0].callStartTimeOnly}</b> — Agent: <i>${expertList[0].agentName}</i> เวลารอก่อนวางสาย <b>${expertList[0].timeToAbandonFormatted}</b> | สถานะ: สายวางในคิวก่อนเข้าเครื่อง Agent เดี่ยว หรือไม่ได้ติ๊กชื่อ Agent นี้ตอนดึงรายงาน CUIC จึงมี Ring Time = 0:00:00)`
-                            : ''}
+                        <b>🎯 ข้อมูลเฉพาะ Call Skills / CSQ = <span class="text-indigo-700 underline">Khelps_Expert</span>:</b>
+                        พบสาย Abandoned จำนวน <b>${totalExpertAb} รายการ</b>
+                        — เบอร์โทร <b>${first.callAni}</b> (โทรเข้าเบอร์ <b>${first.calledNumber || '14903'}</b>) เวลา <b>${first.callStartDate} ${first.callStartTimeOnly} - ${first.callAbandonTimeOnly}</b>
+                        | Agent: <b>${first.agentName}</b> | เวลารอก่อนวางสาย (Time to Abandon): <b>${first.timeToAbandonFormatted} (${first.timeToAbandonSec} วินาที)</b>
+                        | <b>Ring Time: ${first.isMatchedCuic ? first.cuicRingTimeFormatted : '0:00:00 (วางสายก่อน 12 วินาที / ในคิว)'}</b>
                     </div>
-                    <button type="button" onclick="setAbandonedSkillFilter('matched_cuic')" class="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors shrink-0">
-                        ดูสาย Abandoned ที่ตรงกับ CUIC ทั้ง ${matchedList.length} รายการ →
-                    </button>
                 </div>
             `;
         } else {
             banner.innerHTML = `
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                        <b>📊 สรุปการเทียบไฟล์ Abandoned Call กับ CUIC:</b>
-                        ตรงกับงานใน CUIC (Contact Disposition = 1) จำนวน <b>${matchedList.length} สาย</b>
-                        — แบ่งเป็น <b>วางสายก่อน 12 วินาที (&lt; 12s): ${matchedLt12} สาย</b> (Ring Time 0:00:00 – 0:00:07)
-                        และ <b>วางสายที่ 12 วินาทีพอดี (= 12s): ${matchedEq12} สาย</b> (Ring Time 0:00:12)
-                    </div>
-                    <button type="button" onclick="setAbandonedSkillFilter('Khelps_Expert')" class="text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition-colors shrink-0">
-                        🎯 สลับดูเฉพาะ Khelps_Expert (${expertList.length})
-                    </button>
+                <div>
+                    <b>🎯 ข้อมูลเฉพาะ Call Skills / CSQ = <span class="text-indigo-700 underline">Khelps_Expert</span>:</b>
+                    แสดงเฉพาะข้อมูลของ Skill <b>Khelps_Expert</b> อย่างเดียวตามเงื่อนไขที่กำหนด
                 </div>
             `;
         }
@@ -2879,24 +2904,20 @@ function renderAbandonedComparisonView() {
 
     const isAdmin = userRole === 'admin';
 
-    if (filteredAb.length === 0) {
+    // Render Table 1: Abandoned Call (Khelps_Expert Only)
+    if (expertAbList.length === 0) {
         empty?.classList.remove('hidden');
     } else {
         empty?.classList.add('hidden');
-        filteredAb.forEach((d, idx) => {
-            const tr = document.createElement('tr');
-            tr.className = d.isMatchedCuic
+        let rowsHtml = '';
+        expertAbList.forEach((d, idx) => {
+            const rowClass = d.isMatchedCuic
                 ? (d.cuicRingTimeSec >= 12 ? 'bg-red-50/30 hover:bg-red-50/50 transition-colors' : 'hover:bg-amber-50/30 transition-colors')
                 : 'bg-indigo-50/20 hover:bg-indigo-50/40 transition-colors';
 
             const sessionBadge = d.isMatchedCuic
                 ? `<span class="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono font-bold text-[11px] inline-flex items-center gap-1">✅ ${d.cuicSessionId}</span>`
-                : `<div class="flex flex-col"><span class="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px] inline-block w-fit">⚠️ วางสายในคิว (Queue Abandon)</span><span class="text-[10px] text-gray-400 mt-0.5">ไม่มีเลข Session เดี่ยวในไฟล์ CUIC (33)</span></div>`;
-
-            let skillBadgeClass = 'bg-gray-100 text-gray-700';
-            if (d.callSkills.includes('Expert')) skillBadgeClass = 'bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold';
-            else if (d.callSkills.includes('Incident')) skillBadgeClass = 'bg-purple-50 text-purple-700 border border-purple-200 font-semibold';
-            else if (d.callSkills.includes('8855')) skillBadgeClass = 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold';
+                : `<div class="flex flex-col"><span class="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px] inline-block w-fit">⚠️ วางสายในคิว (Queue Abandon)</span><span class="text-[10px] text-gray-400 mt-0.5">ไม่มีเลข Session เดี่ยวในไฟล์ CUIC</span></div>`;
 
             let ringTimeHtml = '';
             if (d.isMatchedCuic) {
@@ -2915,34 +2936,37 @@ function renderAbandonedComparisonView() {
                 ? `<input type="text" data-id="${d._id}" value="${d.remark || ''}" placeholder="ระบุหมายเหตุ..." class="abandoned-remark-input remark-input">`
                 : `<span class="text-xs text-gray-600">${d.remark || '-'}</span>`;
 
-            tr.innerHTML = `
-                <td class="px-3 py-3 text-center font-bold text-gray-400">${idx + 1}</td>
-                <td class="px-4 py-3">${sessionBadge}</td>
-                <td class="px-4 py-3">
-                    <div class="font-semibold text-gray-800">${d.callStartDate} <span class="font-mono text-gray-600">${d.callStartTimeOnly}</span></div>
-                    <div class="text-[10px] text-red-500 font-mono">Abandon: ${d.callAbandonTimeOnly || '-'}</div>
-                </td>
-                <td class="px-4 py-3">
-                    <span class="px-2.5 py-0.5 rounded-full text-[11px] ${skillBadgeClass}">${d.callSkills}</span>
-                </td>
-                <td class="px-4 py-3">
-                    <div class="font-mono font-bold text-gray-800">${d.callAni || '-'}</div>
-                    <div class="text-[10px] text-gray-400 font-mono">Called: ${d.calledNumber || '-'}</div>
-                </td>
-                <td class="px-4 py-3 font-semibold text-gray-800 max-w-[220px] truncate" title="${d.agentName}">${d.agentName}</td>
-                <td class="px-4 py-3 text-center">
-                    <span class="font-mono font-bold text-gray-800">${d.timeToAbandonFormatted}</span>
-                    <span class="text-[10px] text-gray-400 block">(${d.timeToAbandonSec}s)</span>
-                </td>
-                <td class="px-4 py-3 text-center font-mono text-gray-600">${d.isMatchedCuic ? d.cuicQueueTimeFormatted : d.timeToAbandonFormatted}</td>
-                <td class="px-4 py-3 text-center bg-amber-50/30">${ringTimeHtml}</td>
-                <td class="px-4 py-3">${remarkCell}</td>
+            rowsHtml += `
+                <tr class="${rowClass}">
+                    <td class="px-3 py-3 text-center font-bold text-gray-400">${idx + 1}</td>
+                    <td class="px-4 py-3">${sessionBadge}</td>
+                    <td class="px-4 py-3">
+                        <div class="font-semibold text-gray-800">${d.callStartDate} <span class="font-mono text-gray-600">${d.callStartTimeOnly}</span></div>
+                        <div class="text-[10px] text-red-500 font-mono">Abandon: ${d.callAbandonTimeOnly || '-'}</div>
+                    </td>
+                    <td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 font-semibold">${d.weekKey}</span></td>
+                    <td class="px-4 py-3">
+                        <span class="px-2.5 py-0.5 rounded-full text-[11px] bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold">${d.callSkills || 'Khelps_Expert'}</span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="font-mono font-bold text-gray-800">${d.callAni || '-'}</div>
+                        <div class="text-[10px] text-gray-400 font-mono">Called: ${d.calledNumber || '14903'}</div>
+                    </td>
+                    <td class="px-4 py-3 font-semibold text-gray-800 max-w-[240px] truncate" title="${d.agentName}">${d.agentName}</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="font-mono font-bold text-gray-800">${d.timeToAbandonFormatted}</span>
+                        <span class="text-[10px] text-gray-400 block">(${d.timeToAbandonSec}s)</span>
+                    </td>
+                    <td class="px-4 py-3 text-center font-mono text-gray-600">${d.isMatchedCuic ? d.cuicQueueTimeFormatted : d.timeToAbandonFormatted}</td>
+                    <td class="px-4 py-3 text-center bg-amber-50/30">${ringTimeHtml}</td>
+                    <td class="px-4 py-3">${remarkCell}</td>
+                </tr>
             `;
-            tbody.appendChild(tr);
         });
+        tbody.innerHTML = rowsHtml;
 
         if (isAdmin) {
-            document.querySelectorAll('#abandonedTableBody .abandoned-remark-input').forEach(input => {
+            tbody.querySelectorAll('.abandoned-remark-input').forEach(input => {
                 input.addEventListener('change', async e => {
                     const rowId = e.target.dataset.id;
                     const rec = processedAbandonedData.find(r => r._id === rowId);
@@ -2955,57 +2979,78 @@ function renderAbandonedComparisonView() {
         }
     }
 
-    // Render Table 2: Reference CUIC rows for Khelps_Expert (Ring <= 12s) or Contact Disposition = 1
+    // Render Table 2: CUIC Khelps_Expert Reference Table (Strictly Khelps_Expert Only)
     if (refTableBody) {
-        refTableBody.innerHTML = '';
-        let refRows = [];
-        if (abandonedSkillFilter === 'Khelps_Expert') {
-            refRows = processedCallData.filter(c =>
-                (callFilterWeek === 'all' || c.weekKey === callFilterWeek) &&
-                (c.applicationName.toLowerCase().includes('khelps_expert') ||
-                 c.csqNames.toLowerCase().includes('khelps_expert') ||
-                 c.calledNumber === '14903')
-            );
-            if (refTitle) refTitle.textContent = `รายการงานในไฟล์ CUIC ที่เป็น Skill "Khelps_Expert" ทั้งหมด (แสดง Ring Time ≤ 12 วินาที)`;
-        } else {
-            refRows = processedCallData.filter(c =>
-                (callFilterWeek === 'all' || c.weekKey === callFilterWeek) &&
-                (c.isMatchedAbandonedReport || c.isCuicAbandoned)
-            );
-            if (refTitle) refTitle.textContent = `รายการงานในไฟล์ CUIC ที่มีสถานะ Abandoned (Contact Disposition = 1) และ Ring Time ≤ 12 วินาที`;
+        if (refTitle) {
+            refTitle.textContent = `รายการงานในไฟล์ CUIC เฉพาะ CSQ / Application = "Khelps_Expert" (แสดง Ring Time)`;
+        }
+        if (refCountBadge) {
+            refCountBadge.textContent = `${cuicExpertList.length} รายการ`;
         }
 
-        if (refCountBadge) refCountBadge.textContent = `${refRows.length} รายการ`;
-
-        if (refRows.length === 0) {
-            refTableBody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-xs text-gray-400">ไม่พบรายการในไฟล์ CUIC</td></tr>`;
+        if (cuicExpertList.length === 0) {
+            refTableBody.innerHTML = `<tr><td colspan="11" class="p-6 text-center text-xs text-gray-400">ไม่พบรายการ Khelps_Expert ในไฟล์ CUIC</td></tr>`;
         } else {
-            refRows.forEach(c => {
-                const tr = document.createElement('tr');
-                tr.className = c.isRing12 ? 'bg-red-50/30 hover:bg-red-50/50' : 'hover:bg-gray-50/70';
+            let refHtml = '';
+            cuicExpertList.forEach(c => {
+                const rowClass = c.isRing12 ? 'bg-red-50/30 hover:bg-red-50/50' : 'hover:bg-gray-50/70';
                 const dispBadge = (c.contactDisposition === '1' || c.contactDisposition === '1.0')
                     ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">1 (Abandoned)</span>`
                     : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">2 (Handled)</span>`;
                 const rBadge = c.ringTimeSec >= 12
-                    ? `<span class="ring-12-badge text-xs px-2.5 py-0.5 font-bold">🔴 ${c.ringTimeFormatted} (= 12s)</span>`
+                    ? `<span class="ring-12-badge text-xs px-2.5 py-0.5 font-bold">🔴 ${c.ringTimeFormatted} (≥ 12s)</span>`
                     : `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">⏱️ ${c.ringTimeFormatted} (&lt; 12s)</span>`;
 
-                tr.innerHTML = `
-                    <td class="px-4 py-2.5 font-mono font-bold text-gray-800">${c.sessionId}</td>
-                    <td class="px-4 py-2.5 text-gray-700">${c.callStartDate} <span class="font-mono text-gray-500">${c.callStartTimeOnly}</span></td>
-                    <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded text-[11px] bg-indigo-50 text-indigo-700 font-semibold">${c.csqNames || c.applicationName}</span></td>
-                    <td class="px-4 py-2.5 font-mono font-semibold text-gray-800">${c.callingNumber || '-'}</td>
-                    <td class="px-4 py-2.5 font-bold text-gray-900">${c.agentName}</td>
-                    <td class="px-4 py-2.5 text-center">${dispBadge}</td>
-                    <td class="px-4 py-2.5 text-center font-mono text-gray-600">${c.queueTimeFormatted}</td>
-                    <td class="px-4 py-2.5 text-center bg-purple-50/30">${rBadge}</td>
-                    <td class="px-4 py-2.5 text-center font-mono text-gray-600">${c.talkTimeFormatted}</td>
+                refHtml += `
+                    <tr class="${rowClass}">
+                        <td class="px-4 py-2.5 font-mono font-bold text-gray-800">${c.sessionId}</td>
+                        <td class="px-4 py-2.5 text-gray-700">${c.callStartDate} <span class="font-mono text-gray-500">${c.callStartTimeOnly}</span></td>
+                        <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 font-semibold">${c.weekKey}</span></td>
+                        <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded text-[11px] bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">${c.csqNames || c.applicationName}</span></td>
+                        <td class="px-4 py-2.5 font-mono font-semibold text-gray-800">${c.callingNumber || '-'}</td>
+                        <td class="px-4 py-2.5 font-mono text-gray-600">${c.calledNumber || '14903'}</td>
+                        <td class="px-4 py-2.5 font-bold text-gray-900">${c.agentName}</td>
+                        <td class="px-4 py-2.5 text-center">${dispBadge}</td>
+                        <td class="px-4 py-2.5 text-center font-mono text-gray-600">${c.queueTimeFormatted}</td>
+                        <td class="px-4 py-2.5 text-center bg-purple-50/30">${rBadge}</td>
+                        <td class="px-4 py-2.5 text-center font-mono text-gray-600">${c.talkTimeFormatted}</td>
+                    </tr>
                 `;
-                refTableBody.appendChild(tr);
             });
+            refTableBody.innerHTML = refHtml;
         }
     }
 }
+
+window.exportAbandonedToCSV = function() {
+    const expertAbList = processedAbandonedData.filter(isExpertSkillRecord);
+    if (!expertAbList.length) {
+        alert('ไม่มีข้อมูล Abandoned Call (Khelps_Expert) ให้ Export');
+        return;
+    }
+    let csv = "\uFEFFCUIC Session ID,Call Start Time,Call Abandon Time,Week,Call Skills,Call Routed CSQ,Call ANI,Called Number,Agent Name,Time to Abandon,Time to Abandon (s),CUIC Ring Time,Remarks\n";
+    expertAbList.forEach(d => {
+        csv += [
+            `"${d.isMatchedCuic ? d.cuicSessionId : 'Queue Abandon'}"`,
+            `"${d.callStartTime}"`,
+            `"${d.callAbandonTime}"`,
+            `"${d.weekKey}"`,
+            `"${d.callSkills}"`,
+            `"${d.callRoutedCsq}"`,
+            `"${d.callAni}"`,
+            `"${d.calledNumber}"`,
+            `"${d.agentName}"`,
+            `"${d.timeToAbandonFormatted}"`,
+            d.timeToAbandonSec,
+            `"${d.isMatchedCuic ? d.cuicRingTimeFormatted : '0:00:00'}"`,
+            `"${(d.remark || '').replace(/"/g, '""')}"`
+        ].join(',') + "\n";
+    });
+    const a = document.createElement('a');
+    a.href = encodeURI("data:text/csv;charset=utf-8," + csv);
+    a.download = `Abandoned_Khelps_Expert_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+};
 
 function exportCallToCSV() {
     if (!processedCallData.length) {
