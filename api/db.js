@@ -17,7 +17,11 @@ async function getDatabase() {
             maxPoolSize: 10,
             serverSelectionTimeoutMS: 8000
         });
-        cachedClient = client.connect();
+        cachedClient = client.connect().catch(err => {
+            cachedClient = null;
+            global._mongoClientPromise = null;
+            throw err;
+        });
         global._mongoClientPromise = cachedClient;
     }
     const client = await cachedClient;
