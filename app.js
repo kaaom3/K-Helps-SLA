@@ -25,6 +25,11 @@ let callViewMode = 'comparison'; // 'comparison', 'details', or 'abandoned'
 let abandonedSkillFilter = 'Khelps_Expert'; // 'Khelps_Expert', 'matched_cuic', 'all', 'Khelps_Incident', 'Khelps_8855'
 let chartInstances = {};
 
+// Call Table Pagination State (for fast UI rendering)
+let callTablePage = 1;
+const CALL_PAGE_SIZE = 50;
+let lastFilteredCallList = [];
+
 // Role State ('user' = View Only, 'admin' = Full Edit/Upload/Delete)
 let userRole = 'user';
 let adminPassword = '';
@@ -505,7 +510,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const callSearch = document.getElementById('callSearchInput');
     if (callSearch) {
-        callSearch.addEventListener('input', () => updateCallDashboardView());
+        callSearch.addEventListener('input', () => {
+            callTablePage = 1;
+            updateCallDashboardView();
+        });
     }
 
     // Chat SLA Filter events
@@ -2120,12 +2128,14 @@ function setupCallWeekFilters() {
 }
 
 window.setCallWeekFilter = function(weekKey) {
+    callTablePage = 1;
     callFilterWeek = weekKey;
     setupCallWeekFilters();
     updateCallDashboardView();
 };
 
 window.setCallRingFilter = function(status) {
+    callTablePage = 1;
     callFilterRing = status;
     const buttons = document.querySelectorAll('#callRingStatusPills button');
     buttons.forEach(btn => {
@@ -2142,6 +2152,7 @@ window.setCallRingFilter = function(status) {
 };
 
 window.setCallViewMode = function(mode) {
+    callTablePage = 1;
     callViewMode = mode;
     const btnMatrix = document.getElementById('callViewBtnMatrix');
     const btnDetails = document.getElementById('callViewBtnDetails');
@@ -2170,6 +2181,18 @@ window.setCallViewMode = function(mode) {
         viewDetails?.classList.remove('hidden');
     }
     updateCallDashboardView();
+};
+
+window.changeCallTablePage = function(delta) {
+    const totalPages = Math.ceil(lastFilteredCallList.length / CALL_PAGE_SIZE) || 1;
+    callTablePage = Math.min(Math.max(1, callTablePage + delta), totalPages);
+    renderCallTable(lastFilteredCallList);
+};
+
+window.gotoCallTablePage = function(page) {
+    const totalPages = Math.ceil(lastFilteredCallList.length / CALL_PAGE_SIZE) || 1;
+    callTablePage = Math.min(Math.max(1, page), totalPages);
+    renderCallTable(lastFilteredCallList);
 };
 
 window.setAbandonedSkillFilter = function(skill) {
@@ -2287,11 +2310,15 @@ function updateCallDashboardView() {
     const recordBadge = document.getElementById('callRecordCountBadge');
     if (recordBadge) recordBadge.textContent = `${total} records`;
 
-    // Render Views
-    renderWeeklyComparisonMatrix(filtered);
-    renderWeeklyComparisonChart(filtered);
-    renderCallTable(filtered);
-    renderAbandonedComparisonView();
+    // Render Views (Lazy rendering: only render the active view mode for instant UI performance)
+    if (callViewMode === 'comparison') {
+        renderWeeklyComparisonMatrix(filtered);
+        renderWeeklyComparisonChart(filtered);
+    } else if (callViewMode === 'abandoned') {
+        renderAbandonedComparisonView();
+    } else {
+        renderCallTable(filtered);
+    }
 }
 
 function renderCallAgentSidebar(data) {
@@ -2321,6 +2348,7 @@ function renderCallAgentSidebar(data) {
         const row = document.createElement('div');
         row.className = `group-row ${isSelected ? 'selected' : ''}`;
         row.onclick = () => {
+            callTablePage = 1;
             if (selectedCallAgents.has(agentName)) {
                 selectedCallAgents.delete(agentName);
             } else {
@@ -2353,6 +2381,7 @@ function renderCallAgentSidebar(data) {
 }
 
 window.selectAllCallAgents = function() {
+    callTablePage = 1;
     const container = document.getElementById('callAgentListBody');
     const rows = container?.querySelectorAll('.group-row') || [];
     const names = Array.from(rows).map(r => r.querySelector('span.truncate')?.title || '').filter(Boolean);
@@ -2445,11 +2474,11 @@ function renderWeeklyComparisonMatrix(filteredData) {
     let grandTotal12s = 0;
     let grandTotalCalls = 0;
 
+    let matrixHtml = '';
+
     agentList.forEach(ag => {
-        const tr = document.createElement('tr');
         const has12s = ag.total12s > 0;
-        if (has12s) tr.className = 'bg-red-50/20 hover:bg-red-50/30 transition-colors';
-        else tr.className = 'hover:bg-gray-50/50 transition-colors';
+        const rowClass = has12s ? 'bg-red-50/20 hover:bg-red-50/30 transition-colors' : 'hover:bg-gray-50/50 transition-colors';
 
         let rowHtml = `
             <td class="px-4 py-2.5 font-bold text-gray-900 sticky left-0 bg-inherit z-10 flex items-center gap-2">
@@ -2521,13 +2550,10 @@ function renderWeeklyComparisonMatrix(filteredData) {
             `;
         }
 
-        tr.innerHTML = rowHtml;
-        tbody.appendChild(tr);
+        matrixHtml += `<tr class="${rowClass}">${rowHtml}</tr>`;
     });
 
     // Grand Total Footer Row
-    const footTr = document.createElement('tr');
-    footTr.className = 'bg-gray-100/90 font-bold border-t-2 border-gray-300 text-gray-900';
     let footHtml = `
         <td class="px-4 py-3 sticky left-0 bg-gray-100 z-10 text-gray-900 font-extrabold uppercase">
             รวมทั้งหมด (Grand Total)
@@ -2562,8 +2588,8 @@ function renderWeeklyComparisonMatrix(filteredData) {
         `;
     }
 
-    footTr.innerHTML = footHtml;
-    tbody.appendChild(footTr);
+    matrixHtml += `<tr class="bg-gray-100/90 font-bold border-t-2 border-gray-300 text-gray-900">${footHtml}</tr>`;
+    tbody.innerHTML = matrixHtml;
 }
 
 function renderWeeklyComparisonChart(filteredData) {
@@ -2661,28 +2687,42 @@ function renderWeeklyComparisonChart(filteredData) {
 }
 
 function renderCallTable(callList) {
+    lastFilteredCallList = callList || [];
     const tbody = document.getElementById('callTableBody');
     const empty = document.getElementById('emptyCallTableState');
+    const paginationBar = document.getElementById('callTablePaginationBar');
+    const pageInfo = document.getElementById('callTablePageInfo');
+    const paginationBtns = document.getElementById('callTablePaginationBtns');
     if (!tbody) return;
-    tbody.innerHTML = '';
 
-    if (callList.length === 0) {
+    if (!callList || callList.length === 0) {
+        tbody.innerHTML = '';
         empty?.classList.remove('hidden');
+        if (paginationBar) paginationBar.classList.add('hidden');
         return;
     }
     empty?.classList.add('hidden');
+    if (paginationBar) paginationBar.classList.remove('hidden');
+
+    const totalPages = Math.ceil(callList.length / CALL_PAGE_SIZE) || 1;
+    if (callTablePage > totalPages) callTablePage = totalPages;
+    if (callTablePage < 1) callTablePage = 1;
+
+    const startIdx = (callTablePage - 1) * CALL_PAGE_SIZE;
+    const endIdx = Math.min(startIdx + CALL_PAGE_SIZE, callList.length);
+    const pagedItems = callList.slice(startIdx, endIdx);
 
     const isAdmin = userRole === 'admin';
 
-    callList.forEach(d => {
-        const tr = document.createElement('tr');
+    let html = '';
+    for (let i = 0; i < pagedItems.length; i++) {
+        const d = pagedItems[i];
         const isAb = d.isMatchedAbandonedReport || d.isCuicAbandoned;
+        let rowClass = 'hover:bg-gray-50/50 transition-colors';
         if (d.isRing12) {
-            tr.className = 'bg-red-50/40 hover:bg-red-50/60 transition-colors font-medium';
+            rowClass = 'bg-red-50/40 hover:bg-red-50/60 transition-colors font-medium';
         } else if (isAb) {
-            tr.className = 'bg-amber-50/40 hover:bg-amber-50/60 transition-colors font-medium';
-        } else {
-            tr.className = 'hover:bg-gray-50/50 transition-colors';
+            rowClass = 'bg-amber-50/40 hover:bg-amber-50/60 transition-colors font-medium';
         }
 
         let ringBadge = d.isRing12 ?
@@ -2697,23 +2737,40 @@ function renderCallTable(callList) {
             ? `<input type="text" data-id="${d._id}" value="${d.remark || ''}" placeholder="ระบุหมายเหตุ..." class="call-remark-input remark-input">`
             : `<span class="text-xs text-gray-600">${d.remark || '-'}</span>`;
 
-        tr.innerHTML = `
-            <td class="px-4 py-2.5 font-mono text-[11px] text-gray-700">${d.sessionId}</td>
-            <td class="px-4 py-2.5 text-gray-700">${d.callStartDate} <span class="text-[10px] text-gray-400 font-mono">${d.callStartTimeOnly}</span></td>
-            <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 font-semibold">${d.weekKey}</span></td>
-            <td class="px-4 py-2.5 font-bold ${d.isRing12 ? 'text-red-700' : (isAb ? 'text-amber-800' : 'text-gray-900')}">${d.agentName}</td>
-            <td class="px-4 py-2.5 text-gray-600 max-w-[130px] truncate" title="${d.csqNames}">${d.csqNames || '-'}</td>
-            <td class="px-4 py-2.5 font-mono text-gray-700">${d.callingNumber || '-'}</td>
-            <td class="px-4 py-2.5 text-center">${ringBadge}</td>
-            <td class="px-4 py-2.5 font-mono text-gray-600">${d.talkTimeFormatted}</td>
-            <td class="px-4 py-2.5 font-mono text-gray-600">${d.workTimeFormatted}</td>
-            <td class="px-4 py-2.5">${remarkCell}</td>
+        html += `
+            <tr class="${rowClass}">
+                <td class="px-4 py-2.5 font-mono text-[11px] text-gray-700">${d.sessionId}</td>
+                <td class="px-4 py-2.5 text-gray-700">${d.callStartDate} <span class="text-[10px] text-gray-400 font-mono">${d.callStartTimeOnly}</span></td>
+                <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 font-semibold">${d.weekKey}</span></td>
+                <td class="px-4 py-2.5 font-bold ${d.isRing12 ? 'text-red-700' : (isAb ? 'text-amber-800' : 'text-gray-900')}">${d.agentName}</td>
+                <td class="px-4 py-2.5 text-gray-600 max-w-[130px] truncate" title="${d.csqNames}">${d.csqNames || '-'}</td>
+                <td class="px-4 py-2.5 font-mono text-gray-700">${d.callingNumber || '-'}</td>
+                <td class="px-4 py-2.5 text-center">${ringBadge}</td>
+                <td class="px-4 py-2.5 font-mono text-gray-600">${d.talkTimeFormatted}</td>
+                <td class="px-4 py-2.5 font-mono text-gray-600">${d.workTimeFormatted}</td>
+                <td class="px-4 py-2.5">${remarkCell}</td>
+            </tr>
         `;
-        tbody.appendChild(tr);
-    });
+    }
+    tbody.innerHTML = html;
+
+    // Update pagination controls
+    if (pageInfo) {
+        pageInfo.textContent = `กำลังแสดงรายการที่ ${(startIdx + 1).toLocaleString()} - ${endIdx.toLocaleString()} จากทั้งหมด ${callList.length.toLocaleString()} รายการ`;
+    }
+
+    if (paginationBtns) {
+        paginationBtns.innerHTML = `
+            <button onclick="gotoCallTablePage(1)" ${callTablePage === 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">« แรกสุด</button>
+            <button onclick="changeCallTablePage(-1)" ${callTablePage === 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">‹ ก่อนหน้า</button>
+            <span class="px-2.5 py-1 font-semibold text-purple-700 text-xs">${callTablePage} / ${totalPages}</span>
+            <button onclick="changeCallTablePage(1)" ${callTablePage === totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">ถัดไป ›</button>
+            <button onclick="gotoCallTablePage(${totalPages})" ${callTablePage === totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">ท้ายสุด »</button>
+        `;
+    }
 
     if (isAdmin) {
-        document.querySelectorAll('#callTableBody .call-remark-input').forEach(input => {
+        tbody.querySelectorAll('.call-remark-input').forEach(input => {
             input.addEventListener('change', async e => {
                 const rowId = e.target.dataset.id;
                 const rec = processedCallData.find(r => r._id === rowId);
