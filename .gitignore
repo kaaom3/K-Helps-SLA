@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Environment variables (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel/
+
+# Excel raw data files (protect sensitive report data)
+*.xlsx
+*.xls
+*.csv
+
+# One-off scratch python scripts
+add_select_all_agents.py
+fix_*.py
+make_smaller.py
+move_filters.py
+refactor_multi.py
+revert_sid.py
+rewrite*.py
+update_sid.py
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/

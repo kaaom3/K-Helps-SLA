@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "functions": {
+    "api/db.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/db",
+      "destination": "/api/db.js"
+    }
+  ]
+}

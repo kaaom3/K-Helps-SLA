@@ -1,0 +1,258 @@
+/* ===================================================
+   K-Helps SLA Dashboard – Modern Style Sheet
+   =================================================== */
+
+/* Import Inter font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+* { box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, sans-serif; }
+
+/* ── Loading bar animation ── */
+.loading-bar {
+    animation: progress 2s ease-in-out infinite;
+}
+@keyframes progress {
+    0%   { width: 0%; }
+    60%  { width: 90%; }
+    100% { width: 100%; }
+}
+
+/* ── Module Tab Buttons ── */
+.module-tab-btn {
+    color: #64748b;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+}
+.module-tab-btn:hover {
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.6);
+}
+.module-tab-btn.active {
+    color: #007a3b;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border-color: #e2e8f0;
+}
+
+/* ── KPI Cards ── */
+.kpi-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px -4px rgba(0,0,0,0.08);
+}
+.kpi-card[data-color="blue"]:hover   { box-shadow: 0 8px 24px -4px rgba(59,130,246,0.18); }
+.kpi-card[data-color="green"]:hover  { box-shadow: 0 8px 24px -4px rgba(0,169,80,0.18); }
+.kpi-card[data-color="red"]:hover    { box-shadow: 0 8px 24px -4px rgba(239,68,68,0.18); }
+.kpi-card[data-color="purple"]:hover { box-shadow: 0 8px 24px -4px rgba(168,85,247,0.18); }
+.kpi-card[data-color="orange"]:hover { box-shadow: 0 8px 24px -4px rgba(249,115,22,0.18); }
+
+/* ── Number count-up animation ── */
+@keyframes countUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.kpi-number { animation: countUp 0.5s ease forwards; }
+
+/* ── Sidebar Rows (Agent / Assignment Group) ── */
+.agent-row, .group-row {
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    border-left: 3px solid transparent;
+}
+.agent-row:hover, .group-row:hover { background: #f8fafc; border-left-color: #cbd5e1; }
+.agent-row.selected, .group-row.selected { background: #edf7f1; border-left-color: #00a950; }
+
+/* ── Filter Pill (Checkbox pills) ── */
+.filter-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 5px;
+    font-size: 10px;
+    font-weight: 500;
+    color: #6b7280;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    user-select: none;
+    background: #fff;
+}
+.filter-label:hover { border-color: #00a950; color: #00a950; background: #f0fdf6; }
+input[type="checkbox"].filter-checkbox-year:checked + .filter-label,
+input[type="checkbox"].filter-checkbox-month:checked + .filter-label,
+input[type="checkbox"].filter-checkbox-day:checked + .filter-label,
+input[type="checkbox"].filter-task-year:checked + .filter-label,
+input[type="checkbox"].filter-task-month:checked + .filter-label,
+input[type="checkbox"].filter-task-day:checked + .filter-label {
+    background: #00a950;
+    color: #fff;
+    border-color: #00a950;
+}
+
+/* ── Quick Filter Buttons ── */
+.quick-filter-btn {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+.quick-filter-btn:hover {
+    border-color: #00a950;
+    color: #00a950;
+    background: #f0fdf6;
+}
+.quick-filter-btn.active {
+    background: #00a950;
+    color: #fff;
+    border-color: #00a950;
+    box-shadow: 0 1px 2px rgba(0, 169, 80, 0.2);
+}
+
+/* ── Priority Badges ── */
+.prio-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+.prio-badge.p1 { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.prio-badge.p2 { background: #ffedd5; color: #c2410c; border: 1px solid #fdba74; }
+.prio-badge.p3 { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.prio-badge.p4 { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+
+/* ── Status Badges ── */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    white-space: nowrap;
+}
+.status-badge.met { background: #dcfce7; color: #15803d; }
+.status-badge.breached { background: #fee2e2; color: #b91c1c; }
+
+/* ── Table Rows ── */
+#breachTableBody tr, #taskTableBody tr {
+    transition: background 0.12s ease;
+}
+#breachTableBody tr:hover, #taskTableBody tr:hover { background: #f8fafc; }
+
+/* ── Remarks Input ── */
+.remark-input {
+    width: 100%;
+    min-width: 130px;
+    font-size: 11px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 4px 8px;
+    background: #fff;
+    color: #374151;
+    transition: border-color 0.15s;
+    outline: none;
+}
+.remark-input:focus { border-color: #00a950; box-shadow: 0 0 0 2px rgba(0,169,80,0.1); }
+
+/* ── Response Time Badge ── */
+.response-badge {
+    display: inline-flex;
+    align-items: center;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 20px;
+}
+.response-badge.high   { background: #fef2f2; color: #dc2626; }
+.response-badge.medium { background: #fff7ed; color: #ea580c; }
+
+/* ── SLA Rate Badge ── */
+.sla-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 20px;
+}
+.sla-badge.good { background: #dcfce7; color: #15803d; }
+.sla-badge.warn { background: #fef9c3; color: #92400e; }
+.sla-badge.bad  { background: #fee2e2; color: #b91c1c; }
+
+/* ── Custom Scrollbar ── */
+.custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── Smooth fade-in for dashboard & views ── */
+#dashboardSection, .module-view { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── ApexCharts tooltip overrides ── */
+.apexcharts-tooltip {
+    border-radius: 10px !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important;
+    border: 1px solid #f3f4f6 !important;
+}
+.apexcharts-tooltip-title {
+    background: #f9fafb !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    border-bottom: 1px solid #f3f4f6 !important;
+}
+
+/* ── Call Report Badges & Trends ── */
+.ring-12-badge {
+    color: #dc2626;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.trend-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.trend-badge.up {
+    color: #b91c1c;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+}
+.trend-badge.down {
+    color: #047857;
+    background-color: #ecfdf5;
+    border: 1px solid #a7f3d0;
+}
+.trend-badge.same {
+    color: #4b5563;
+    background-color: #f3f4f6;
+    border: 1px solid #e5e7eb;
+}
