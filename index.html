@@ -63,7 +63,7 @@
                     <div class="flex items-center justify-between mb-3">
                         <div class="flex items-center gap-2">
                             <span class="text-xs font-bold text-brand-800 uppercase tracking-wider">📥 นำเข้าไฟล์ Excel ใหม่เข้าสู่ MongoDB</span>
-                            <span class="text-[10px] font-semibold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Auto-Detect 3 โมดูล</span>
+                            <span class="text-[10px] font-semibold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Auto-Detect 4 รูปแบบไฟล์</span>
                         </div>
                     </div>
 
@@ -72,7 +72,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
                         <p class="text-xs font-semibold text-gray-700 group-hover:text-brand-700">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ Excel (.xlsx, .xls) มาวางที่นี่</p>
-                        <p class="text-[11px] text-gray-400 mt-0.5">รองรับไฟล์ Chat SLA, Task SLA (ServiceNow), และ Call Ring Time (CUIC)</p>
+                        <p class="text-[11px] text-gray-400 mt-0.5">รองรับไฟล์ Chat SLA, Task SLA (ServiceNow), Call Ring Time (CUIC), และ Abandoned Call Detail Report</p>
                         <input type="file" id="reportFiles" accept=".xlsx, .xls" multiple class="hidden">
                     </label>
                     <p id="fileNameDisplay" class="text-xs text-center text-brand-700 font-medium mt-2 min-h-[16px] truncate px-2"></p>
@@ -265,6 +265,13 @@
                                 <span>ลบเฉพาะ <b>Call Report</b></span>
                             </span>
                             <span id="clearCallCountBadge" class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-mono">0</span>
+                        </button>
+                        <button type="button" id="clearOnlyAbandonedBtn" class="w-full text-left px-3 py-2 hover:bg-red-50 text-gray-700 hover:text-red-600 flex items-center justify-between transition-colors">
+                            <span class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                                <span>ลบเฉพาะ <b>Abandoned Call</b></span>
+                            </span>
+                            <span id="clearAbandonedCountBadge" class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-mono">0</span>
                         </button>
                         <div class="my-1 border-t border-gray-100"></div>
                         <button type="button" id="clearAllDbDropdownBtn" class="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 font-semibold flex items-center gap-2 transition-colors">
@@ -756,11 +763,12 @@
                         </div>
 
                         <!-- Ring Time Status Filter Pills -->
-                        <div class="flex items-center gap-2 shrink-0">
+                        <div class="flex items-center gap-2 shrink-0 flex-wrap">
                             <span class="text-[10px] font-bold text-gray-400 uppercase">สถานะ Ring:</span>
-                            <div class="flex items-center gap-1" id="callRingStatusPills">
+                            <div class="flex items-center gap-1 flex-wrap" id="callRingStatusPills">
                                 <button class="quick-filter-btn active" data-status="all" onclick="setCallRingFilter('all')">ทั้งหมด</button>
                                 <button class="quick-filter-btn text-red-600 font-bold" data-status="12s" onclick="setCallRingFilter('12s')">🔴 Ring ≥ 12s (<span id="pill12sCount">0</span>)</button>
+                                <button class="quick-filter-btn text-amber-600 font-bold" data-status="abandoned" onclick="setCallRingFilter('abandoned')">🟠 Abandoned Call (<span id="pillAbandonedCount">0</span>)</button>
                                 <button class="quick-filter-btn" data-status="normal" onclick="setCallRingFilter('normal')">🟢 ปกติ (< 12s)</button>
                             </div>
                         </div>
@@ -768,14 +776,17 @@
 
                     <!-- Sub controls: View Mode Tabs + Search + Export -->
                     <div class="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-gray-100">
-                        <div class="flex items-center gap-2">
-                            <!-- Toggle View Mode: Matrix vs Table -->
-                            <div class="flex items-center bg-gray-100 p-0.5 rounded-lg gap-1 text-xs">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <!-- Toggle View Mode: Matrix vs Table vs Abandoned -->
+                            <div class="flex items-center bg-gray-100 p-0.5 rounded-lg gap-1 text-xs flex-wrap">
                                 <button id="callViewBtnMatrix" onclick="setCallViewMode('comparison')" class="px-3 py-1 rounded-md font-semibold transition-all shadow-2xs bg-white text-purple-700">
                                     📈 ตารางเทียบยอดรายสัปดาห์ (Weekly Matrix)
                                 </button>
                                 <button id="callViewBtnDetails" onclick="setCallViewMode('details')" class="px-3 py-1 rounded-md font-medium transition-all text-gray-600 hover:text-gray-900">
                                     📋 รายการประวัติสาย (Call Records)
+                                </button>
+                                <button id="callViewBtnAbandoned" onclick="setCallViewMode('abandoned')" class="px-3 py-1 rounded-md font-medium transition-all text-amber-700 hover:text-amber-900">
+                                    📵 เทียบสาย Abandoned Call (CUIC Match)
                                 </button>
                             </div>
                         </div>
@@ -822,7 +833,7 @@
                     <div class="flex-1 min-w-0 flex flex-col gap-5">
                         
                         <!-- KPI Cards (Call Ring Time) -->
-                        <div class="grid grid-cols-2 xl:grid-cols-5 gap-4">
+                        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5">
                             <!-- Total Calls -->
                             <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default" data-color="purple">
                                 <div class="flex items-start justify-between">
@@ -849,6 +860,21 @@
                                     </div>
                                 </div>
                                 <div class="mt-2 h-1 w-full bg-red-100 rounded-full overflow-hidden"><div id="call12sBar" class="h-1 bg-red-500 rounded-full" style="width:0%"></div></div>
+                            </div>
+
+                            <!-- Abandoned Calls (<=12s) -->
+                            <div class="kpi-card group bg-white rounded-xl shadow-xs border border-amber-200 p-4 cursor-pointer bg-amber-50/30 hover:bg-amber-50/60 transition-colors" data-color="orange" onclick="setCallViewMode('abandoned')" title="คลิกเพื่อดูตารางเทียบสาย Abandoned Call กับ CUIC">
+                                <div class="flex items-start justify-between">
+                                    <div>
+                                        <p class="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">Abandoned Call (≤ 12s)</p>
+                                        <p class="text-2xl font-bold text-amber-700 mt-1 kpi-number" id="callAbandonedCard">0</p>
+                                        <p class="text-[10px] text-amber-600/80 font-medium mt-0.5" id="callAbandonedSubtext">Expert: 0 | CUIC: 0</p>
+                                    </div>
+                                    <div class="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z"/></svg>
+                                    </div>
+                                </div>
+                                <div class="mt-1.5 h-1 w-full bg-amber-100 rounded-full overflow-hidden"><div class="h-1 bg-amber-500 rounded-full w-full"></div></div>
                             </div>
 
                             <!-- Normal Calls (<12s) -->
@@ -966,6 +992,110 @@
                                     ไม่พบรายการสายตามเงื่อนไขที่เลือก
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- VIEW 3: ABANDONED CALL VS CUIC COMPARISON CONTAINER -->
+                        <div id="callAbandonedViewContainer" class="hidden flex flex-col gap-5">
+                            
+                            <!-- Abandoned Call Report vs CUIC Matching Card -->
+                            <div class="bg-white rounded-xl shadow-xs border border-amber-200 overflow-hidden">
+                                <div class="px-5 py-3.5 bg-amber-50/40 border-b border-amber-100 flex flex-wrap items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></div>
+                                        <div>
+                                            <h3 class="text-sm font-bold text-gray-900">📵 ตารางเทียบสาย Abandoned Call กับงานใน CUIC (Ring Time ≤ 12 วินาที)</h3>
+                                            <p class="text-[11px] text-gray-500">ตรวจสอบสายที่โทรเข้ามาแล้ววางสายก่อน 12 วินาที หรือเท่ากับ 12 วินาทีพอดี โดยเทียบข้อมูลจากไฟล์ Abandoned Call Detail Activity Report กับ CUIC</p>
+                                        </div>
+                                    </div>
+                                    <span id="abandonedMatchSummaryBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200"></span>
+                                </div>
+
+                                <!-- Call Skills Filter Bar -->
+                                <div class="px-5 py-3 bg-gray-50/70 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-[11px] font-bold text-gray-600 uppercase tracking-wider">กรอง Call Skills:</span>
+                                        <div class="flex items-center gap-1.5 flex-wrap" id="abandonedSkillPills">
+                                            <button type="button" class="quick-filter-btn active font-bold text-indigo-700" data-skill="Khelps_Expert" onclick="setAbandonedSkillFilter('Khelps_Expert')">
+                                                🎯 เฉพาะ Khelps_Expert (<span id="abSkillExpertCount">0</span>)
+                                            </button>
+                                            <button type="button" class="quick-filter-btn font-semibold text-emerald-700" data-skill="matched_cuic" onclick="setAbandonedSkillFilter('matched_cuic')">
+                                                ✅ ที่ตรงกับ CUIC (<span id="abSkillMatchedCount">0</span>)
+                                            </button>
+                                            <button type="button" class="quick-filter-btn" data-skill="all" onclick="setAbandonedSkillFilter('all')">
+                                                📋 ทั้งหมดทุก Skills (<span id="abSkillAllCount">0</span>)
+                                            </button>
+                                            <button type="button" class="quick-filter-btn" data-skill="Khelps_Incident" onclick="setAbandonedSkillFilter('Khelps_Incident')">
+                                                Khelps_Incident (<span id="abSkillIncidentCount">0</span>)
+                                            </button>
+                                            <button type="button" class="quick-filter-btn" data-skill="Khelps_8855" onclick="setAbandonedSkillFilter('Khelps_8855')">
+                                                Khelps_8855 (<span id="abSkill8855Count">0</span>)
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="text-[11px] text-gray-500 flex items-center gap-3">
+                                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> วางก่อน 12 วิ (&lt; 12s)</span>
+                                        <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> วางที่ 12 วิพอดี (= 12s)</span>
+                                    </div>
+                                </div>
+
+                                <!-- Info Banner for Khelps_Expert / Matching context -->
+                                <div id="abandonedContextBanner" class="px-5 py-2.5 bg-indigo-50/50 border-b border-indigo-100 text-xs text-indigo-900"></div>
+
+                                <!-- Table 1: Abandoned Report Rows Matched with CUIC -->
+                                <div class="overflow-x-auto custom-scrollbar" style="max-height: 450px;">
+                                    <table class="w-full text-xs whitespace-nowrap">
+                                        <thead class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
+                                            <tr>
+                                                <th class="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">งานที่ตรงใน CUIC (Session ID)</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Start / Abandon Time</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Skills / CSQ</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call ANI (เบอร์โทร)</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
+                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Time to Abandon</th>
+                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">CUIC Queue Time</th>
+                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-amber-700 uppercase tracking-wider bg-amber-50/60">CUIC Ring Time (≤ 12s)</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Remarks</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="abandonedTableBody" class="divide-y divide-gray-100"></tbody>
+                                    </table>
+                                </div>
+                                <div id="emptyAbandonedTableState" class="hidden p-8 text-center text-xs text-gray-400">
+                                    ไม่พบรายการ Abandoned Call ตามตัวกรองที่เลือก
+                                </div>
+                            </div>
+
+                            <!-- Table 2: CUIC Khelps_Expert & Contact Disposition=1 Reference Table -->
+                            <div class="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden" id="cuicExpertReferenceCard">
+                                <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 bg-purple-50/30">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-2 h-2 rounded-full bg-purple-600"></div>
+                                        <h3 class="text-sm font-bold text-gray-800" id="cuicRefTableTitle">รายการสาย Khelps_Expert ในไฟล์ CUIC (Ring Time ≤ 12 วินาที)</h3>
+                                        <span id="cuicExpertRefCountBadge" class="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full">0 รายการ</span>
+                                    </div>
+                                    <span class="text-[11px] text-gray-500">ข้อมูลจากไฟล์ CUIC Detailed Call CSQ Agent Report โดยตรง</span>
+                                </div>
+                                <div class="overflow-x-auto custom-scrollbar" style="max-height: 380px;">
+                                    <table class="w-full text-xs whitespace-nowrap">
+                                        <thead class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
+                                            <tr>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">CUIC Session ID</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Call Start / End Time</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Application / CSQ</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Calling Number (ANI)</th>
+                                                <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
+                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Disposition</th>
+                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Queue Time</th>
+                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-purple-700 uppercase tracking-wider bg-purple-50/50">Ring Time (CUIC)</th>
+                                                <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Talk Time</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cuicExpertRefTableBody" class="divide-y divide-gray-50"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
                         </div>
 
                     </div>

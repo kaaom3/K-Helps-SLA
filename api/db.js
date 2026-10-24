@@ -31,7 +31,8 @@ async function getDatabase() {
 const VALID_STORES = {
     sessions: 'session_id',
     task_sla: '_id',
-    call_records: '_id'
+    call_records: '_id',
+    abandoned_calls: '_id'
 };
 
 function isAdminAuthorized(req, body) {
@@ -74,10 +75,11 @@ module.exports = async function handler(req, res) {
                 return res.status(200).json({ ok: true, mode: 'mongodb', data: docs });
             }
 
-            const [chatSla, taskSla, callReport, uploadLogs] = await Promise.all([
+            const [chatSla, taskSla, callReport, abandonedCalls, uploadLogs] = await Promise.all([
                 db.collection('sessions').find({}).toArray(),
                 db.collection('task_sla').find({}).toArray(),
                 db.collection('call_records').find({}).toArray(),
+                db.collection('abandoned_calls').find({}).toArray(),
                 db.collection('upload_logs').find({}).sort({ uploadedAt: -1 }).toArray()
             ]);
 
@@ -87,6 +89,7 @@ module.exports = async function handler(req, res) {
                 chatSla,
                 taskSla,
                 callReport,
+                abandonedCalls,
                 uploadLogs
             });
         }
@@ -171,13 +174,14 @@ module.exports = async function handler(req, res) {
                     const delRes = await db.collection(targetStore).deleteMany({ _fileId: fileId });
                     deletedRecordsCount = delRes.deletedCount || 0;
                 } else {
-                    // Search across all 3 stores if store wasn't specified
-                    const [r1, r2, r3] = await Promise.all([
+                    // Search across all stores if store wasn't specified
+                    const [r1, r2, r3, r4] = await Promise.all([
                         db.collection('sessions').deleteMany({ _fileId: fileId }),
                         db.collection('task_sla').deleteMany({ _fileId: fileId }),
-                        db.collection('call_records').deleteMany({ _fileId: fileId })
+                        db.collection('call_records').deleteMany({ _fileId: fileId }),
+                        db.collection('abandoned_calls').deleteMany({ _fileId: fileId })
                     ]);
-                    deletedRecordsCount = (r1.deletedCount || 0) + (r2.deletedCount || 0) + (r3.deletedCount || 0);
+                    deletedRecordsCount = (r1.deletedCount || 0) + (r2.deletedCount || 0) + (r3.deletedCount || 0) + (r4.deletedCount || 0);
                 }
 
                 await db.collection('upload_logs').deleteOne({ _id: fileId });
@@ -195,6 +199,7 @@ module.exports = async function handler(req, res) {
                     db.collection('sessions').deleteMany({}),
                     db.collection('task_sla').deleteMany({}),
                     db.collection('call_records').deleteMany({}),
+                    db.collection('abandoned_calls').deleteMany({}),
                     db.collection('upload_logs').deleteMany({})
                 ]);
                 return res.status(200).json({ ok: true, cleared: 'all' });
