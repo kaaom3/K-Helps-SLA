@@ -2538,9 +2538,9 @@ function renderWeeklyComparisonMatrix(filteredData) {
 
     if (displayWeeks.length > 1) {
         headHtml += `
-            <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-purple-700 uppercase tracking-wider bg-purple-50/50">ผลรวม All (Total 12s)</th>
+            <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-purple-700 uppercase tracking-wider bg-purple-50/50">Total 12s</th>
             <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">สายทั้งหมด</th>
-            <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-700 uppercase tracking-wider">แนวโน้ม (Trend W vs W-1)</th>
+            <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-700 uppercase tracking-wider">Trend</th>
         `;
     } else {
         headHtml += `
@@ -2641,11 +2641,11 @@ function renderWeeklyComparisonMatrix(filteredData) {
 
             let trendBadge = '';
             if (diff > 0) {
-                trendBadge = `<span class="trend-badge up font-bold">+${diff} 🔺 เพิ่มขึ้น</span>`;
+                trendBadge = `<span class="trend-badge up font-bold">+${diff} 🔺</span>`;
             } else if (diff < 0) {
-                trendBadge = `<span class="trend-badge down font-bold">${diff} 🔻 ลดลง</span>`;
+                trendBadge = `<span class="trend-badge down font-bold">${diff} 🔻</span>`;
             } else {
-                trendBadge = `<span class="trend-badge same font-medium">0 ➖ คงที่</span>`;
+                trendBadge = `<span class="trend-badge same font-medium">0 ➖</span>`;
             }
 
             const total12Badge = ag.total12s > 0 ? 

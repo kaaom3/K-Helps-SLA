@@ -915,10 +915,7 @@
                             <!-- Comparison Chart -->
                             <div class="bg-white rounded-xl shadow-xs border border-gray-100 p-4">
                                 <div class="flex items-center justify-between mb-2">
-                                    <div class="flex items-center gap-2">
-                                        <h3 class="text-sm font-bold text-gray-800">กราฟเปรียบเทียบจำนวนสาย Ring ≥ 12s แต่ละสัปดาห์</h3>
-                                        <span class="text-[10px] text-gray-400 font-medium">(เทียบยอดรายอาทิตย์)</span>
-                                    </div>
+                                    <h3 class="text-sm font-bold text-gray-800">กราฟเปรียบเทียบจำนวนสาย Ring ≥ 12s แต่ละสัปดาห์</h3>
                                 </div>
                                 <div id="callWeeklyCompChart" class="w-full" style="height:240px;min-height:240px;"></div>
                             </div>
@@ -928,10 +925,9 @@
                                 <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                                     <div class="flex items-center gap-2">
                                         <div class="w-2 h-2 rounded-full bg-purple-600"></div>
-                                        <h3 class="text-sm font-bold text-gray-800">ตารางสรุปเปรียบเทียบยอดรายอาทิตย์ (Weekly Comparison Matrix)</h3>
+                                        <h3 class="text-sm font-bold text-gray-800">ตารางสรุปเปรียบเทียบยอดรายอาทิตย์</h3>
                                         <span id="callMatrixCountBadge" class="text-[10px] bg-purple-50 text-purple-700 font-semibold px-2 py-0.5 rounded-full"></span>
                                     </div>
-                                    <span class="text-xs text-gray-400">เปรียบเทียบสัปดาห์ล่าสุด vs สัปดาห์ก่อนหน้า</span>
                                 </div>
                                 <div class="overflow-x-auto custom-scrollbar">
                                     <table class="w-full text-xs whitespace-nowrap" id="callMatrixTable">
@@ -1205,9 +1201,9 @@
                         <div class="flex items-center gap-2 flex-wrap">
                             <span class="text-[10px] font-bold text-gray-400 uppercase">FCR Filter:</span>
                             <div class="flex items-center gap-1" id="fcrStatusPills">
-                                <button class="quick-filter-btn active" data-fcrstatus="all" onclick="setFcrStatusFilter('all')">All Base (ตัวหารทั้งหมด)</button>
-                                <button class="quick-filter-btn" data-fcrstatus="fcr" onclick="setFcrStatusFilter('fcr')">✅ นับเป็น FCR (ตัวตั้ง: RFI + Resolved/Closed)</button>
-                                <button class="quick-filter-btn" data-fcrstatus="non_fcr" onclick="setFcrStatusFilter('non_fcr')">⚠️ ไม่เข้าเงื่อนไข FCR (ส่วนต่าง)</button>
+                                <button class="quick-filter-btn active" data-fcrstatus="all" onclick="setFcrStatusFilter('all')">All (ทั้งหมด)</button>
+                                <button class="quick-filter-btn" data-fcrstatus="fcr" onclick="setFcrStatusFilter('fcr')">FCR (ตัวตั้ง)</button>
+                                <button class="quick-filter-btn" data-fcrstatus="non_fcr" onclick="setFcrStatusFilter('non_fcr')">Non-FCR (ส่วนต่าง)</button>
                             </div>
                         </div>
 
@@ -1322,21 +1318,9 @@
                     
                     <!-- Left Pivot Table: Total Base (ตัวหาร) -->
                     <div class="lg:col-span-4 bg-white rounded-xl shadow-xs border border-orange-200 overflow-hidden flex flex-col">
-                        <div class="px-4 py-3 bg-orange-50/70 border-b border-orange-200">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs font-extrabold text-orange-900 uppercase">📊 ตาราง Pivot ซ้าย (ยอดรวม / ตัวหาร)</span>
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-800">Count of Number</span>
-                            </div>
-                            <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] bg-white/80 rounded-lg p-2.5 border border-orange-200/70">
-                                <div class="text-gray-500">Application Acronym:</div>
-                                <div class="font-bold text-gray-800">(All)</div>
-                                <div class="text-gray-500">Service:</div>
-                                <div class="font-bold text-orange-800">ตัด Tracking ออก</div>
-                                <div class="text-gray-500">Category:</div>
-                                <div class="font-bold text-orange-800">Email, Inquiry/Help, Software</div>
-                                <div class="text-gray-500">State:</div>
-                                <div class="font-bold text-gray-800">(All)</div>
-                            </div>
+                        <div class="px-4 py-2.5 bg-orange-50/70 border-b border-orange-200 flex items-center justify-between">
+                            <span class="text-xs font-bold text-orange-900">ตาราง Pivot (ยอดรวม / ตัวหาร)</span>
+                            <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-800">Count</span>
                         </div>
                         <div class="flex-1 overflow-x-auto">
                             <table class="w-full text-xs">
@@ -1353,22 +1337,10 @@
                     </div>
 
                     <!-- Right Pivot Table: FCR Cases (ตัวตั้ง) -->
-                    <div class="lg:col-span-4 bg-white rounded-xl shadow-xs border border-orange-200 overflow-hidden flex flex-col">
-                        <div class="px-4 py-3 bg-orange-50/70 border-b border-orange-200">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs font-extrabold text-orange-900 uppercase">🎯 ตาราง Pivot ขวา (นับเป็น FCR / ตัวตั้ง)</span>
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-teal-100 text-teal-800">RFI &amp; Resolved/Closed</span>
-                            </div>
-                            <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] bg-white/80 rounded-lg p-2.5 border border-orange-200/70">
-                                <div class="text-gray-500">Service:</div>
-                                <div class="font-bold text-teal-800">RFI &amp; Advisory Service</div>
-                                <div class="text-gray-500">Category:</div>
-                                <div class="font-bold text-teal-800">Email, Inquiry/Help, Software</div>
-                                <div class="text-gray-500">State:</div>
-                                <div class="font-bold text-teal-800">Resolved, Closed</div>
-                                <div class="text-gray-500">Target SLA:</div>
-                                <div class="font-bold text-emerald-700">&gt; 90%</div>
-                            </div>
+                    <div class="lg:col-span-4 bg-white rounded-xl shadow-xs border border-teal-200 overflow-hidden flex flex-col">
+                        <div class="px-4 py-2.5 bg-teal-50/70 border-b border-teal-200 flex items-center justify-between">
+                            <span class="text-xs font-bold text-teal-900">ตาราง Pivot (นับเป็น FCR / ตัวตั้ง)</span>
+                            <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-teal-100 text-teal-800">Count / %</span>
                         </div>
                         <div class="flex-1 overflow-x-auto">
                             <table class="w-full text-xs">
@@ -1387,8 +1359,8 @@
 
                     <!-- Summary Box: %FCR All Channel Table + Bar Chart -->
                     <div class="lg:col-span-4 bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden flex flex-col">
-                        <div class="px-4 py-3 bg-gray-800 text-white flex items-center justify-between">
-                            <span class="text-xs font-extrabold uppercase tracking-wider">📌 สรุป %FCR All Channel (Target &gt; 90%)</span>
+                        <div class="px-4 py-2.5 bg-gray-800 text-white flex items-center justify-between">
+                            <span class="text-xs font-bold">สรุป %FCR All Channel</span>
                             <span id="fcrOverallPassBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500 text-white">PASS</span>
                         </div>
                         <div class="p-4 flex flex-col gap-4 flex-1">
@@ -1418,7 +1390,7 @@
                     <div class="px-5 py-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
                         <div class="flex items-center gap-2">
                             <div class="w-2.5 h-2.5 rounded-full bg-teal-500"></div>
-                            <h3 class="text-sm font-bold text-gray-800">รายการเคส Incident ที่ใช้คำนวณ %FCR (แสดงสถานะตัวตั้ง FCR / ตัวหาร)</h3>
+                            <h3 class="text-sm font-bold text-gray-800">รายการเคส Incident</h3>
                             <span id="fcrTableCountBadge" class="text-[11px] bg-teal-50 text-teal-700 font-bold px-2.5 py-0.5 rounded-full border border-teal-200">0 รายการ</span>
                         </div>
                         <!-- Pagination Bar -->
