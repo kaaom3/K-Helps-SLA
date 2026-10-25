@@ -13,6 +13,7 @@ let processedData = [];          // Chat SLA data
 let processedTaskData = [];      // Task SLA data
 let processedCallData = [];      // Call Report data
 let processedAbandonedData = []; // Abandoned Call Detail Activity Report data
+let processedFcrData = [];       // %FCR (Target>90%) Incident data
 let uploadLogs = [];             // Uploaded Excel File Logs in MongoDB
 let selectedAgentNames = new Set();
 let selectedTaskGroups = new Set();
@@ -23,12 +24,19 @@ let callFilterWeek = 'all'; // 'all' or weekKey (e.g. '2026-W40')
 let callFilterRing = 'all'; // 'all', '12s', 'normal'
 let callViewMode = 'comparison'; // 'comparison' or 'details'
 let abandonedFilterWeek = 'all'; // 'all' or weekKey (for Abandoned Khelps_Expert tab)
+let fcrFilterWeek = 'all';       // 'all' or weekKey
+let fcrFilterChannelGroup = 'all'; // 'all', 'voice', 'line', 'other'
+let fcrFilterStatus = 'all';     // 'all', 'fcr', 'non_fcr'
 let chartInstances = {};
 
-// Call Table Pagination State (for fast UI rendering)
+// Call & FCR Table Pagination State (for fast UI rendering)
 let callTablePage = 1;
 const CALL_PAGE_SIZE = 50;
 let lastFilteredCallList = [];
+
+let fcrTablePage = 1;
+const FCR_PAGE_SIZE = 50;
+let lastFilteredFcrList = [];
 
 // Role State ('user' = View Only, 'admin' = Full Edit/Upload/Delete)
 let userRole = 'user';
@@ -38,6 +46,7 @@ const storeChat = "sessions";
 const storeTask = "task_sla";
 const storeCall = "call_records";
 const storeAbandoned = "abandoned_calls";
+const storeFcr = "fcr_cases";
 
 function filterValidTasks(raw) {
     const seen = new Set();
@@ -107,6 +116,7 @@ function updateRoleUI() {
     else if (currentActiveModule === 'taskSla') updateTaskDashboardView();
     else if (currentActiveModule === 'callReport') updateCallDashboardView();
     else if (currentActiveModule === 'abandonedCall') updateAbandonedDashboardView();
+    else if (currentActiveModule === 'fcr') updateFcrDashboardView();
 }
 
 window.handleRoleToggleClick = function() {
@@ -222,6 +232,8 @@ function renderUploadLogsTable() {
             modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">🎫 % Within SLA of 16 Apps</span>`;
         } else if (log.moduleType === 'abandoned' || log.store === 'abandoned_calls') {
             modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">📵 Call Back (ABN Call of Ex)</span>`;
+        } else if (log.moduleType === 'fcr' || log.store === 'fcr_cases') {
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">🎯 %FCR (Target&gt;90%)</span>`;
         } else {
             modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">📞 Call Not Received (Within 12 Secs)</span>`;
         }
@@ -277,6 +289,7 @@ window.handleDeleteUploadedFile = async function(fileId) {
         setupTaskDateFilters();
         setupCallWeekFilters();
         setupAbandonedWeekFilters();
+        setupFcrWeekFilters();
         switchModuleTab(currentActiveModule);
 
         alert(`✅ ลบไฟล์ "${targetLog.fileName}" และข้อมูลที่เกี่ยวข้องออกจาก MongoDB เรียบร้อยแล้ว`);
@@ -369,6 +382,17 @@ async function loadDataFromDB() {
         }
         return d;
     });
+    processedFcrData = (json.fcrCases || []).map(d => {
+        const m = parseDateSmart(d.opened || d.openedDate);
+        if (m && m.isValid()) {
+            const wInfo = computeMonthWeekInfo(m);
+            d.weekKey = wInfo.weekKey;
+            d.weekLabel = wInfo.weekLabel;
+        }
+        d.isLeftBase = checkFcrLeftBase(d);
+        d.isRightFcr = checkFcrRightTarget(d);
+        return d;
+    }).filter(d => d.isLeftBase);
     uploadLogs = json.uploadLogs || [];
     enrichAbandonedWithCuic();
 }
@@ -384,6 +408,7 @@ window.syncFromCloudDB = async function() {
         setupTaskDateFilters();
         setupCallWeekFilters();
         setupAbandonedWeekFilters();
+        setupFcrWeekFilters();
         switchModuleTab(currentActiveModule);
     } catch (e) {
         alert('ไม่สามารถซิงค์ข้อมูลจาก MongoDB ได้: ' + e.message);
@@ -408,6 +433,10 @@ async function clearAbandonedStore() {
     await clearStoreInCloud(storeAbandoned);
 }
 
+async function clearFcrStore() {
+    await clearStoreInCloud(storeFcr);
+}
+
 async function saveChatDataToDB(dataArray) {
     if (!dataArray || !dataArray.length) return;
     await saveStoreToCloud(storeChat, dataArray);
@@ -426,6 +455,11 @@ async function saveCallDataToDB(dataArray) {
 async function saveAbandonedDataToDB(dataArray) {
     if (!dataArray || !dataArray.length) return;
     await saveStoreToCloud(storeAbandoned, dataArray);
+}
+
+async function saveFcrDataToDB(dataArray) {
+    if (!dataArray || !dataArray.length) return;
+    await saveStoreToCloud(storeFcr, dataArray);
 }
 
 async function clearAllDB() {
@@ -525,6 +559,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         handleClearAbandonedData();
     });
 
+    const clearFcrBtn = document.getElementById('clearOnlyFcrBtn');
+    if (clearFcrBtn) clearFcrBtn.addEventListener('click', () => {
+        if (clearDropdownMenu) clearDropdownMenu.classList.add('hidden');
+        handleClearFcrData();
+    });
+
     const clearAllBtn = document.getElementById('clearAllDbDropdownBtn');
     if (clearAllBtn) clearAllBtn.addEventListener('click', () => {
         if (clearDropdownMenu) clearDropdownMenu.classList.add('hidden');
@@ -543,6 +583,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (abSearch) {
         abSearch.addEventListener('input', () => {
             updateAbandonedDashboardView();
+        });
+    }
+
+    const fcrSearch = document.getElementById('fcrSearchInput');
+    if (fcrSearch) {
+        fcrSearch.addEventListener('input', () => {
+            fcrTablePage = 1;
+            updateFcrDashboardView();
         });
     }
 
@@ -582,14 +630,16 @@ function switchModuleTab(moduleName) {
     const tabTask = document.getElementById('tabBtnTaskSla');
     const tabCall = document.getElementById('tabBtnCallReport');
     const tabAbandoned = document.getElementById('tabBtnAbandoned');
+    const tabFcr = document.getElementById('tabBtnFcr');
     const viewChat = document.getElementById('chatSlaModuleView');
     const viewTask = document.getElementById('taskSlaModuleView');
     const viewCall = document.getElementById('callReportModuleView');
     const viewAbandoned = document.getElementById('abandonedModuleView');
+    const viewFcr = document.getElementById('fcrModuleView');
     const clearBtnText = document.getElementById('clearDbBtnText');
 
-    [tabChat, tabTask, tabCall, tabAbandoned].forEach(t => t?.classList.remove('active'));
-    [viewChat, viewTask, viewCall, viewAbandoned].forEach(v => v?.classList.add('hidden'));
+    [tabChat, tabTask, tabCall, tabAbandoned, tabFcr].forEach(t => t?.classList.remove('active'));
+    [viewChat, viewTask, viewCall, viewAbandoned, viewFcr].forEach(v => v?.classList.add('hidden'));
 
     if (moduleName === 'chatSla') {
         tabChat?.classList.add('active');
@@ -615,6 +665,12 @@ function switchModuleTab(moduleName) {
         if (clearBtnText) clearBtnText.textContent = 'Clear Abandoned DB';
         setupAbandonedWeekFilters();
         updateAbandonedDashboardView();
+    } else if (moduleName === 'fcr') {
+        tabFcr?.classList.add('active');
+        viewFcr?.classList.remove('hidden');
+        if (clearBtnText) clearBtnText.textContent = 'Clear FCR DB';
+        setupFcrWeekFilters();
+        updateFcrDashboardView();
     }
 }
 
@@ -623,6 +679,7 @@ function updateNavBadges() {
     const taskBadge = document.getElementById('navBadgeTask');
     const callBadge = document.getElementById('navBadgeCall');
     const abBadge = document.getElementById('navBadgeAbandoned');
+    const fcrBadge = document.getElementById('navBadgeFcr');
     if (chatBadge) {
         chatBadge.textContent = processedData.length;
         chatBadge.classList.toggle('hidden', processedData.length === 0);
@@ -639,14 +696,20 @@ function updateNavBadges() {
         abBadge.textContent = processedAbandonedData.length;
         abBadge.classList.toggle('hidden', processedAbandonedData.length === 0);
     }
+    if (fcrBadge) {
+        fcrBadge.textContent = processedFcrData.length;
+        fcrBadge.classList.toggle('hidden', processedFcrData.length === 0);
+    }
     const dropChatBadge = document.getElementById('clearChatCountBadge');
     const dropTaskBadge = document.getElementById('clearTaskCountBadge');
     const dropCallBadge = document.getElementById('clearCallCountBadge');
     const dropAbandonedBadge = document.getElementById('clearAbandonedCountBadge');
+    const dropFcrBadge = document.getElementById('clearFcrCountBadge');
     if (dropChatBadge) dropChatBadge.textContent = processedData.length;
     if (dropTaskBadge) dropTaskBadge.textContent = processedTaskData.length;
     if (dropCallBadge) dropCallBadge.textContent = processedCallData.length;
     if (dropAbandonedBadge) dropAbandonedBadge.textContent = processedAbandonedData.length;
+    if (dropFcrBadge) dropFcrBadge.textContent = processedFcrData.length;
 
     const fileBadge = document.getElementById('fileLogCountBadge');
     if (fileBadge) fileBadge.textContent = uploadLogs.length;
@@ -708,10 +771,10 @@ async function handleClearCallData() {
 async function handleClearAbandonedData() {
     if (userRole !== 'admin') return;
     if (!processedAbandonedData.length) {
-        alert('ไม่มีข้อมูล Abandoned Call (Khelps_Expert) ในระบบ');
+        alert('ไม่มีข้อมูล Call Back (ABN Call of Ex) ในระบบ');
         return;
     }
-    if (!confirm(`ยืนยันการลบข้อมูล Abandoned Call (Khelps_Expert) ทั้งหมด (${processedAbandonedData.length.toLocaleString()} รายการ) ออกจาก MongoDB หรือไม่?\n\n* ข้อมูลส่วนอื่นจะไม่ได้รับผลกระทบ`)) return;
+    if (!confirm(`ยืนยันการลบข้อมูล Call Back (ABN Call of Ex) ทั้งหมด (${processedAbandonedData.length.toLocaleString()} รายการ) ออกจาก MongoDB หรือไม่?\n\n* ข้อมูลส่วนอื่นจะไม่ได้รับผลกระทบ`)) return;
 
     await clearAbandonedStore();
     await loadDataFromDB();
@@ -721,14 +784,30 @@ async function handleClearAbandonedData() {
     updateAbandonedDashboardView();
 }
 
+async function handleClearFcrData() {
+    if (userRole !== 'admin') return;
+    if (!processedFcrData.length) {
+        alert('ไม่มีข้อมูล %FCR (Target>90%) ในระบบ');
+        return;
+    }
+    if (!confirm(`ยืนยันการลบข้อมูล %FCR (Target>90%) ทั้งหมด (${processedFcrData.length.toLocaleString()} รายการ) ออกจาก MongoDB หรือไม่?\n\n* ข้อมูลส่วนอื่นจะไม่ได้รับผลกระทบ`)) return;
+
+    await clearFcrStore();
+    await loadDataFromDB();
+    updateNavBadges();
+    renderUploadLogsTable();
+    setupFcrWeekFilters();
+    updateFcrDashboardView();
+}
+
 async function handleClearAllData() {
     if (userRole !== 'admin') return;
-    const total = processedData.length + processedTaskData.length + processedCallData.length + processedAbandonedData.length;
+    const total = processedData.length + processedTaskData.length + processedCallData.length + processedAbandonedData.length + processedFcrData.length;
     if (total === 0 && uploadLogs.length === 0) {
         alert('ไม่มีข้อมูลในฐานข้อมูล');
         return;
     }
-    if (!confirm(`⚠️ ยืนยันการลบข้อมูลทั้งหมดใน MongoDB?\n- Chat SLA: ${processedData.length.toLocaleString()} รายการ\n- Task SLA: ${processedTaskData.length.toLocaleString()} รายการ\n- Call Report: ${processedCallData.length.toLocaleString()} รายการ\n- Abandoned (Khelps_Expert): ${processedAbandonedData.length.toLocaleString()} รายการ\n\nข้อมูลทุกแท็บและประวัติไฟล์ทั้งหมดจะถูกลบ!`)) return;
+    if (!confirm(`⚠️ ยืนยันการลบข้อมูลทั้งหมดใน MongoDB?\n- First Response ECE: ${processedData.length.toLocaleString()} รายการ\n- % Within SLA of 16 Apps: ${processedTaskData.length.toLocaleString()} รายการ\n- Call Not Received: ${processedCallData.length.toLocaleString()} รายการ\n- Call Back (ABN Call of Ex): ${processedAbandonedData.length.toLocaleString()} รายการ\n- %FCR (Target>90%): ${processedFcrData.length.toLocaleString()} รายการ\n\nข้อมูลทุกแท็บและประวัติไฟล์ทั้งหมดจะถูกลบ!`)) return;
 
     await clearAllDB();
     await loadDataFromDB();
@@ -749,6 +828,8 @@ function showDashboard() {
         switchModuleTab('callReport');
     } else if (processedAbandonedData.length > 0 && processedData.length === 0 && processedTaskData.length === 0 && processedCallData.length === 0) {
         switchModuleTab('abandonedCall');
+    } else if (processedFcrData.length > 0 && processedData.length === 0 && processedTaskData.length === 0 && processedCallData.length === 0) {
+        switchModuleTab('fcr');
     } else if (processedTaskData.length > 0 && processedData.length === 0) {
         switchModuleTab('taskSla');
     } else {
@@ -783,6 +864,9 @@ async function handleDataProcessingFrom(fileInput) {
 
         const existingAbandonedRemarks = {};
         processedAbandonedData.forEach(a => { if (a._id && a.remark) existingAbandonedRemarks[a._id] = a.remark; });
+
+        const existingFcrRemarks = {};
+        processedFcrData.forEach(f => { if (f._id && f.remark) existingFcrRemarks[f._id] = f.remark; });
 
         let importedFilesSummary = [];
         let lastImportedModule = null;
@@ -839,6 +923,17 @@ async function handleDataProcessingFrom(fileInput) {
                     rec._fileName = file.name;
                     if (existingAbandonedRemarks[rec._id] && !rec.remark) {
                         rec.remark = existingAbandonedRemarks[rec._id];
+                    }
+                });
+            } else if (detected.type === 'fcr') {
+                storeName = storeFcr;
+                moduleLabel = '%FCR (Target>90%)';
+                lastImportedModule = 'fcr';
+                detected.data.forEach(rec => {
+                    rec._fileId = fileId;
+                    rec._fileName = file.name;
+                    if (existingFcrRemarks[rec._id] && !rec.remark) {
+                        rec.remark = existingFcrRemarks[rec._id];
                     }
                 });
             }
@@ -968,6 +1063,16 @@ async function detectAndProcessFile(file) {
     if (hasCallSession && (hasRingTime || hasAgent)) {
         const callData = parseCallReportRows(rawData);
         return { type: 'call', data: callData };
+    }
+
+    // Check if it's %FCR Incident file (Number, Channel, Service, Category, State)
+    const hasIncNumber = headers.some(h => h.trim() === 'Number');
+    const hasChannel = headers.some(h => h.trim() === 'Channel');
+    const hasServiceAndCategory = headers.some(h => h.trim() === 'Service') && headers.some(h => h.trim() === 'Category');
+
+    if (hasIncNumber && hasChannel && hasServiceAndCategory) {
+        const fcrData = parseFcrRows(rawData);
+        return { type: 'fcr', data: fcrData };
     }
 
     // Check if it's Task SLA ServiceNow file
@@ -3127,3 +3232,567 @@ function animateNumber(id, target) {
     };
     requestAnimationFrame(step);
 }
+
+// ============================================================
+// MODULE 5: %FCR (Target>90%) Parser, Pivot & UI Logic
+// ============================================================
+
+// เงื่อนไขตารางซ้าย (ตัวหาร):
+// 1. Service: ตัด Tracking ออก
+// 2. Category: เลือกเฉพาะ Email, Inquiry/Help (Inquiry / Help), Software
+function checkFcrLeftBase(rec) {
+    const srv = String(rec.service || '').trim().toLowerCase();
+    if (srv.includes('tracking')) return false;
+
+    const cat = String(rec.category || '').trim().toLowerCase().replace(/\s+/g, '');
+    return cat === 'email' || cat === 'inquiry/help' || cat === 'software';
+}
+
+// เงื่อนไขตารางขวา (ตัวตั้ง FCR):
+// 1. ผ่านเงื่อนไขตารางซ้าย (Category = Email, Inquiry/Help, Software)
+// 2. Service: เลือกเฉพาะ RFI (RFI & Advisory Service) อย่างเดียว
+// 3. State: เลือกเฉพาะ Resolved, Closed
+function checkFcrRightTarget(rec) {
+    if (!checkFcrLeftBase(rec)) return false;
+
+    const srv = String(rec.service || '').trim().toLowerCase();
+    if (!srv.includes('rfi')) return false;
+
+    const st = String(rec.state || '').trim().toLowerCase();
+    return st === 'resolved' || st === 'closed';
+}
+
+function getFcrChannelGroup(channelStr) {
+    const ch = String(channelStr || '').trim().toLowerCase();
+    if (ch === 'phone') return 'voice';
+    if (ch === 'line') return 'line';
+    return 'other';
+}
+
+function parseFcrRows(rawData) {
+    const list = [];
+    const seen = new Set();
+
+    rawData.forEach(r => {
+        const num = String(r['Number'] || '').trim();
+        if (!num || seen.has(num)) return;
+
+        const state = String(r['State'] || '').trim();
+        const priority = String(r['Priority'] || '').trim();
+        const caller = String(r['Caller'] || '').trim();
+        const shortDesc = String(r['Short description'] || '').trim().slice(0, 180);
+        const appAcronym = String(r['Application Acronym'] || '').trim();
+        const channel = String(r['Channel'] || '').trim() || '(blank)';
+        const assignmentGroup = String(r['Assignment group'] || '').trim();
+        const assignee = String(r['Assignee'] || '').trim();
+        const category = String(r['Category'] || '').trim();
+        const subcategory = String(r['Subcategory'] || '').trim();
+        const service = String(r['Service'] || '').trim();
+
+        const openedRaw = r['Opened'];
+        const openedM = parseDateSmart(openedRaw);
+        const openedStr = (openedM && openedM.isValid()) ? openedM.format('YYYY-MM-DD HH:mm:ss') : String(openedRaw || '').trim();
+        const openedDate = (openedM && openedM.isValid()) ? openedM.format('YYYY-MM-DD') : '';
+
+        let weekKey = 'Unknown';
+        let weekLabel = 'ไม่ระบุวันที่';
+        if (openedM && openedM.isValid()) {
+            const wInfo = computeMonthWeekInfo(openedM);
+            weekKey = wInfo.weekKey;
+            weekLabel = wInfo.weekLabel;
+        }
+
+        const rec = {
+            _id: num,
+            number: num,
+            priority,
+            state,
+            caller,
+            shortDescription: shortDesc,
+            applicationAcronym: appAcronym,
+            channel,
+            opened: openedStr,
+            openedDate,
+            weekKey,
+            weekLabel,
+            assignmentGroup,
+            assignee,
+            category,
+            subcategory,
+            service,
+            remark: ''
+        };
+
+        rec.isLeftBase = checkFcrLeftBase(rec);
+        rec.isRightFcr = checkFcrRightTarget(rec);
+
+        // เก็บเฉพาะรายการที่เข้าเงื่อนไขตารางซ้าย (ตัวหาร) เพื่อให้ยอดตรงกับ Grand Total ใน Pivot Table
+        if (rec.isLeftBase) {
+            seen.add(num);
+            list.push(rec);
+        }
+    });
+
+    return list;
+}
+
+function setupFcrWeekFilters() {
+    const container = document.getElementById('fcrWeekPills');
+    if (!container) return;
+
+    const weekMap = new Map();
+    processedFcrData.forEach(d => {
+        if (!weekMap.has(d.weekKey)) {
+            weekMap.set(d.weekKey, { key: d.weekKey, label: d.weekLabel || d.weekKey, total: 0, fcr: 0 });
+        }
+        const w = weekMap.get(d.weekKey);
+        w.total++;
+        if (d.isRightFcr) w.fcr++;
+    });
+
+    const sortedWeeks = Array.from(weekMap.values()).sort((a, b) => a.key.localeCompare(b.key));
+
+    let html = `<button class="quick-filter-btn ${fcrFilterWeek === 'all' ? 'active' : ''}" data-week="all" onclick="setFcrWeekFilter('all')">All Weeks (ผลรวมทั้งหมด)</button>`;
+    sortedWeeks.forEach(w => {
+        const pct = w.total > 0 ? Math.round((w.fcr / w.total) * 100) : 0;
+        const badgeColor = pct > 90 ? 'text-teal-700' : 'text-red-600';
+        html += `<button class="quick-filter-btn ${fcrFilterWeek === w.key ? 'active' : ''}" data-week="${w.key}" onclick="setFcrWeekFilter('${w.key}')">${w.label} <span class="${badgeColor} font-bold">(${pct}%)</span></button>`;
+    });
+
+    container.innerHTML = html;
+}
+
+window.setFcrWeekFilter = function(weekKey) {
+    fcrTablePage = 1;
+    fcrFilterWeek = weekKey;
+    setupFcrWeekFilters();
+    updateFcrDashboardView();
+};
+
+window.setFcrChannelGroupFilter = function(chGroup) {
+    fcrTablePage = 1;
+    fcrFilterChannelGroup = chGroup;
+    document.querySelectorAll('#fcrChannelGroupPills .quick-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.chgroup === chGroup);
+    });
+    updateFcrDashboardView();
+};
+
+window.setFcrStatusFilter = function(status) {
+    fcrTablePage = 1;
+    fcrFilterStatus = status;
+    document.querySelectorAll('#fcrStatusPills .quick-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.fcrstatus === status);
+    });
+    updateFcrDashboardView();
+};
+
+window.changeFcrTablePage = function(delta) {
+    const totalPages = Math.ceil(lastFilteredFcrList.length / FCR_PAGE_SIZE) || 1;
+    fcrTablePage = Math.min(Math.max(1, fcrTablePage + delta), totalPages);
+    renderFcrTable(lastFilteredFcrList);
+};
+
+window.gotoFcrTablePage = function(page) {
+    const totalPages = Math.ceil(lastFilteredFcrList.length / FCR_PAGE_SIZE) || 1;
+    fcrTablePage = Math.min(Math.max(1, page), totalPages);
+    renderFcrTable(lastFilteredFcrList);
+};
+
+function updateFcrDashboardView() {
+    // 1. Base filter by selected Week
+    let weekFiltered = processedFcrData.filter(d => d.isLeftBase);
+    if (fcrFilterWeek !== 'all') {
+        weekFiltered = weekFiltered.filter(d => d.weekKey === fcrFilterWeek);
+    }
+
+    // 2. Compute Pivot Tables & Summary Metrics on weekFiltered
+    const channelStatsMap = new Map();
+    let totalLeftAll = 0;
+    let totalRightAll = 0;
+
+    let leftVoice = 0, rightVoice = 0;
+    let leftLine = 0, rightLine = 0;
+    let leftOther = 0, rightOther = 0;
+
+    weekFiltered.forEach(d => {
+        const ch = d.channel || '(blank)';
+        if (!channelStatsMap.has(ch)) {
+            channelStatsMap.set(ch, { channel: ch, leftCount: 0, rightCount: 0 });
+        }
+        const st = channelStatsMap.get(ch);
+        st.leftCount++;
+        totalLeftAll++;
+
+        if (d.isRightFcr) {
+            st.rightCount++;
+            totalRightAll++;
+        }
+
+        const grp = getFcrChannelGroup(ch);
+        if (grp === 'voice') {
+            leftVoice++;
+            if (d.isRightFcr) rightVoice++;
+        } else if (grp === 'line') {
+            leftLine++;
+            if (d.isRightFcr) rightLine++;
+        } else {
+            leftOther++;
+            if (d.isRightFcr) rightOther++;
+        }
+    });
+
+    // Sort channels alphabetically just like Excel Pivot Table (Email, LINE, MS Team, MS Team_Athena, Phone, Self-service)
+    const sortedChannels = Array.from(channelStatsMap.values()).sort((a, b) => a.channel.localeCompare(b.channel));
+
+    // Calculate percentages (Excel rounds to nearest integer, e.g. 91.58% -> 92%)
+    const calcPct = (right, left) => left > 0 ? (right / left) * 100 : 0;
+
+    const allPctExact = calcPct(totalRightAll, totalLeftAll);
+    const voicePctExact = calcPct(rightVoice, leftVoice);
+    const linePctExact = calcPct(rightLine, leftLine);
+    const otherPctExact = calcPct(rightOther, leftOther);
+
+    const allPctRound = Math.round(allPctExact);
+    const voicePctRound = Math.round(voicePctExact);
+    const linePctRound = Math.round(linePctExact);
+    const otherPctRound = Math.round(otherPctExact);
+
+    // Update 5 KPI Cards
+    const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    const setWidth = (id, pct) => { const el = document.getElementById(id); if (el) el.style.width = `${Math.min(100, Math.max(0, pct))}%`; };
+
+    setText('fcrAllPctCard', `${allPctRound}%`);
+    setText('fcrAllExactPctCard', `(${allPctExact.toFixed(2)}%)`);
+    setText('fcrAllRatioSub', `${totalRightAll.toLocaleString()} / ${totalLeftAll.toLocaleString()} เคส`);
+    setWidth('fcrAllBar', allPctExact);
+
+    const targetBadge = document.getElementById('fcrAllTargetBadge');
+    const overallPassBadge = document.getElementById('fcrOverallPassBadge');
+    const isPassTarget = allPctExact > 90;
+    if (targetBadge) {
+        targetBadge.textContent = isPassTarget ? '✅ PASS (>90%)' : '⚠️ BELOW 90%';
+        targetBadge.className = isPassTarget
+            ? 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700'
+            : 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700';
+    }
+    if (overallPassBadge) {
+        overallPassBadge.textContent = isPassTarget ? `✅ PASS (${allPctRound}% > 90%)` : `❌ BELOW TARGET (${allPctRound}%)`;
+        overallPassBadge.className = isPassTarget
+            ? 'text-[10px] font-bold px-2.5 py-0.5 rounded bg-emerald-500 text-white'
+            : 'text-[10px] font-bold px-2.5 py-0.5 rounded bg-red-500 text-white';
+    }
+
+    setText('fcrVoicePctCard', `${voicePctRound}%`);
+    setText('fcrVoiceExactPctCard', `(${voicePctExact.toFixed(2)}%)`);
+    setText('fcrVoiceRatioSub', `${rightVoice.toLocaleString()} / ${leftVoice.toLocaleString()} เคส`);
+    setWidth('fcrVoiceBar', voicePctExact);
+
+    setText('fcrLinePctCard', `${linePctRound}%`);
+    setText('fcrLineExactPctCard', `(${linePctExact.toFixed(2)}%)`);
+    setText('fcrLineRatioSub', `${rightLine.toLocaleString()} / ${leftLine.toLocaleString()} เคส`);
+    setWidth('fcrLineBar', linePctExact);
+
+    setText('fcrOtherPctCard', `${otherPctRound}%`);
+    setText('fcrOtherExactPctCard', `(${otherPctExact.toFixed(2)}%)`);
+    setText('fcrOtherRatioSub', `${rightOther.toLocaleString()} / ${leftOther.toLocaleString()} เคส`);
+    setWidth('fcrOtherBar', otherPctExact);
+
+    const nonFcrCount = totalLeftAll - totalRightAll;
+    setText('fcrGrandCountsCard', `${totalRightAll.toLocaleString()} / ${totalLeftAll.toLocaleString()}`);
+    setText('fcrNonFcrDiffSub', `ส่วนต่าง Non-FCR: ${nonFcrCount.toLocaleString()} เคส`);
+
+    // 3. Render Left Pivot Table (Total Base / ตัวหาร)
+    const leftBody = document.getElementById('fcrLeftPivotBody');
+    const leftFoot = document.getElementById('fcrLeftPivotFoot');
+    if (leftBody && leftFoot) {
+        if (sortedChannels.length === 0) {
+            leftBody.innerHTML = `<tr><td colspan="2" class="p-6 text-center text-gray-400">ไม่มีข้อมูล</td></tr>`;
+            leftFoot.innerHTML = `<tr><td class="px-4 py-2.5">Grand Total</td><td class="px-4 py-2.5 text-right">0</td></tr>`;
+        } else {
+            leftBody.innerHTML = sortedChannels.map(item => `
+                <tr class="hover:bg-orange-50/40 transition-colors">
+                    <td class="px-4 py-2 font-medium text-gray-800">${item.channel}</td>
+                    <td class="px-4 py-2 text-right font-mono font-semibold text-gray-800">${item.leftCount.toLocaleString()}</td>
+                </tr>
+            `).join('');
+            leftFoot.innerHTML = `
+                <tr>
+                    <td class="px-4 py-2.5 font-extrabold">Grand Total</td>
+                    <td class="px-4 py-2.5 text-right font-mono text-sm font-black">${totalLeftAll.toLocaleString()}</td>
+                </tr>
+            `;
+        }
+    }
+
+    // 4. Render Right Pivot Table (FCR Numerator / ตัวตั้ง)
+    const rightBody = document.getElementById('fcrRightPivotBody');
+    const rightFoot = document.getElementById('fcrRightPivotFoot');
+    if (rightBody && rightFoot) {
+        if (sortedChannels.length === 0) {
+            rightBody.innerHTML = `<tr><td colspan="3" class="p-6 text-center text-gray-400">ไม่มีข้อมูล</td></tr>`;
+            rightFoot.innerHTML = `<tr><td class="px-4 py-2.5">Grand Total</td><td class="px-4 py-2.5 text-right">0</td><td class="px-4 py-2.5 text-right">0%</td></tr>`;
+        } else {
+            rightBody.innerHTML = sortedChannels.map(item => {
+                const chPct = item.leftCount > 0 ? Math.round((item.rightCount / item.leftCount) * 100) : 0;
+                const pctColor = chPct >= 90 ? 'text-teal-700 font-bold' : 'text-amber-700 font-semibold';
+                return `
+                    <tr class="hover:bg-orange-50/40 transition-colors">
+                        <td class="px-4 py-2 font-medium text-gray-800">${item.channel}</td>
+                        <td class="px-4 py-2 text-right font-mono font-semibold text-gray-800">${item.rightCount.toLocaleString()}</td>
+                        <td class="px-4 py-2 text-right font-mono ${pctColor}">${chPct}%</td>
+                    </tr>
+                `;
+            }).join('');
+            rightFoot.innerHTML = `
+                <tr>
+                    <td class="px-4 py-2.5 font-extrabold">Grand Total</td>
+                    <td class="px-4 py-2.5 text-right font-mono text-sm font-black">${totalRightAll.toLocaleString()}</td>
+                    <td class="px-4 py-2.5 text-right font-mono text-sm font-black text-teal-800">${allPctRound}%</td>
+                </tr>
+            `;
+        }
+    }
+
+    // 5. Render Summary Box (%FCR All Channel Table + Bar Chart)
+    setText('fcrSummaryHeaderPct', `${allPctRound}%`);
+    const summaryTbody = document.getElementById('fcrSummaryGroupTableBody');
+    if (summaryTbody) {
+        summaryTbody.innerHTML = `
+            <tr class="hover:bg-gray-50">
+                <td class="px-3.5 py-2 font-semibold text-gray-800">-Voice (Phone)</td>
+                <td class="px-3.5 py-2 text-right font-mono text-gray-500 text-[11px]">${rightVoice.toLocaleString()} / ${leftVoice.toLocaleString()}</td>
+                <td class="px-3.5 py-2 text-right font-mono font-bold ${voicePctRound >= 90 ? 'text-emerald-700' : 'text-amber-700'}">${voicePctRound}% <span class="text-[10px] font-normal text-gray-400">(${voicePctExact.toFixed(1)}%)</span></td>
+            </tr>
+            <tr class="hover:bg-gray-50">
+                <td class="px-3.5 py-2 font-semibold text-gray-800">-Non Voice (Line)</td>
+                <td class="px-3.5 py-2 text-right font-mono text-gray-500 text-[11px]">${rightLine.toLocaleString()} / ${leftLine.toLocaleString()}</td>
+                <td class="px-3.5 py-2 text-right font-mono font-bold ${linePctRound >= 90 ? 'text-emerald-700' : 'text-amber-700'}">${linePctRound}% <span class="text-[10px] font-normal text-gray-400">(${linePctExact.toFixed(1)}%)</span></td>
+            </tr>
+            <tr class="hover:bg-gray-50">
+                <td class="px-3.5 py-2 font-semibold text-gray-800">-Email + Other</td>
+                <td class="px-3.5 py-2 text-right font-mono text-gray-500 text-[11px]">${rightOther.toLocaleString()} / ${leftOther.toLocaleString()}</td>
+                <td class="px-3.5 py-2 text-right font-mono font-bold ${otherPctRound >= 90 ? 'text-emerald-700' : 'text-amber-700'}">${otherPctRound}% <span class="text-[10px] font-normal text-gray-400">(${otherPctExact.toFixed(1)}%)</span></td>
+            </tr>
+        `;
+    }
+
+    renderFcrChannelGroupChart(allPctRound, voicePctRound, linePctRound, otherPctRound);
+
+    // 6. Filter Details Table by Channel Group, FCR Status, and Search Query
+    let tableList = weekFiltered;
+
+    if (fcrFilterChannelGroup !== 'all') {
+        tableList = tableList.filter(d => getFcrChannelGroup(d.channel) === fcrFilterChannelGroup);
+    }
+
+    if (fcrFilterStatus === 'fcr') {
+        tableList = tableList.filter(d => d.isRightFcr);
+    } else if (fcrFilterStatus === 'non_fcr') {
+        tableList = tableList.filter(d => !d.isRightFcr);
+    }
+
+    const q = (document.getElementById('fcrSearchInput')?.value || '').trim().toLowerCase();
+    if (q) {
+        tableList = tableList.filter(d =>
+            d.number.toLowerCase().includes(q) ||
+            d.channel.toLowerCase().includes(q) ||
+            d.service.toLowerCase().includes(q) ||
+            d.category.toLowerCase().includes(q) ||
+            d.state.toLowerCase().includes(q) ||
+            d.assignee.toLowerCase().includes(q) ||
+            d.applicationAcronym.toLowerCase().includes(q) ||
+            d.shortDescription.toLowerCase().includes(q)
+        );
+    }
+
+    renderFcrTable(tableList);
+}
+
+function renderFcrChannelGroupChart(allPct, voicePct, linePct, otherPct) {
+    const chartEl = document.getElementById('fcrChannelGroupChart');
+    if (!chartEl) return;
+
+    if (chartInstances['fcrChannelGroup']) {
+        try { chartInstances['fcrChannelGroup'].destroy(); } catch (e) {}
+    }
+
+    chartEl.innerHTML = '';
+    const vals = [allPct, voicePct, linePct, otherPct];
+
+    chartInstances['fcrChannelGroup'] = new ApexCharts(chartEl, {
+        chart: {
+            type: 'bar',
+            height: 185,
+            toolbar: { show: false },
+            fontFamily: 'Inter, sans-serif'
+        },
+        plotOptions: {
+            bar: {
+                horizontal: false,
+                columnWidth: '52%',
+                borderRadius: 6,
+                distributed: true,
+                dataLabels: { position: 'top' }
+            }
+        },
+        colors: ['#0d9488', '#4f46e5', '#10b981', '#f59e0b'],
+        dataLabels: {
+            enabled: true,
+            formatter: val => `${val}%`,
+            offsetY: -18,
+            style: { fontSize: '11px', fontWeight: 800, colors: ['#1e293b'] }
+        },
+        series: [{ name: '%FCR', data: vals }],
+        xaxis: {
+            categories: ['All Channel', 'Voice (Phone)', 'Non Voice (Line)', 'Email + Other'],
+            labels: { style: { fontSize: '10px', fontWeight: 600 } }
+        },
+        yaxis: {
+            min: 0,
+            max: 105,
+            tickAmount: 4,
+            labels: { formatter: v => `${Math.round(v)}%`, style: { fontSize: '10px' } }
+        },
+        annotations: {
+            yaxis: [{
+                y: 90,
+                borderColor: '#ef4444',
+                strokeDashArray: 4,
+                label: {
+                    borderColor: '#ef4444',
+                    style: { color: '#fff', background: '#ef4444', fontSize: '9px', fontWeight: 700 },
+                    text: 'Target > 90%'
+                }
+            }]
+        },
+        legend: { show: false },
+        grid: { borderColor: '#f1f5f9', strokeDashArray: 3 }
+    });
+    chartInstances['fcrChannelGroup'].render();
+}
+
+function renderFcrTable(list) {
+    lastFilteredFcrList = list || [];
+    const tbody = document.getElementById('fcrTableBody');
+    const empty = document.getElementById('emptyFcrTableState');
+    const countBadge = document.getElementById('fcrTableCountBadge');
+    const paginationBar = document.getElementById('fcrTablePaginationBar');
+    const pageInfo = document.getElementById('fcrTablePageInfo');
+    const paginationBtns = document.getElementById('fcrTablePaginationBtns');
+
+    if (countBadge) countBadge.textContent = `${lastFilteredFcrList.length.toLocaleString()} รายการ`;
+    if (!tbody) return;
+
+    if (!lastFilteredFcrList.length) {
+        tbody.innerHTML = '';
+        empty?.classList.remove('hidden');
+        if (paginationBar) paginationBar.classList.add('hidden');
+        return;
+    }
+
+    empty?.classList.add('hidden');
+    if (paginationBar) paginationBar.classList.remove('hidden');
+
+    const totalPages = Math.ceil(lastFilteredFcrList.length / FCR_PAGE_SIZE) || 1;
+    if (fcrTablePage > totalPages) fcrTablePage = totalPages;
+    if (fcrTablePage < 1) fcrTablePage = 1;
+
+    const startIdx = (fcrTablePage - 1) * FCR_PAGE_SIZE;
+    const endIdx = Math.min(startIdx + FCR_PAGE_SIZE, lastFilteredFcrList.length);
+    const paged = lastFilteredFcrList.slice(startIdx, endIdx);
+
+    const isAdmin = userRole === 'admin';
+    let html = '';
+
+    paged.forEach((d, idx) => {
+        const rowNum = startIdx + idx + 1;
+        const fcrBadge = d.isRightFcr
+            ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">✅ FCR (ตัวตั้ง)</span>`
+            : `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">⚠️ Non-FCR (เฉพาะตัวหาร)</span>`;
+
+        const stateLower = String(d.state || '').toLowerCase();
+        const stateBadge = (stateLower === 'resolved' || stateLower === 'closed')
+            ? `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">${d.state}</span>`
+            : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">${d.state || '-'}</span>`;
+
+        const remarkCell = isAdmin
+            ? `<input type="text" data-id="${d._id}" value="${d.remark || ''}" placeholder="ระบุหมายเหตุ..." class="fcr-remark-input remark-input">`
+            : `<span class="text-xs text-gray-600">${d.remark || '-'}</span>`;
+
+        html += `
+            <tr class="${d.isRightFcr ? 'hover:bg-teal-50/20' : 'bg-amber-50/20 hover:bg-amber-50/40'} transition-colors">
+                <td class="px-3 py-2.5 text-center text-gray-400 font-bold">${rowNum}</td>
+                <td class="px-4 py-2.5 font-mono font-bold text-gray-800">${d.number}</td>
+                <td class="px-4 py-2.5 font-mono text-[11px] text-gray-600">${d.opened}</td>
+                <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded text-[10px] bg-teal-50 text-teal-700 font-semibold">${d.weekKey}</span></td>
+                <td class="px-4 py-2.5 font-semibold text-gray-800">${d.channel}</td>
+                <td class="px-4 py-2.5 text-gray-700">${d.service}</td>
+                <td class="px-4 py-2.5 text-gray-700">${d.category}</td>
+                <td class="px-4 py-2.5 text-center">${stateBadge}</td>
+                <td class="px-4 py-2.5 text-center bg-teal-50/20">${fcrBadge}</td>
+                <td class="px-4 py-2.5 text-gray-600">${d.applicationAcronym || '-'}</td>
+                <td class="px-4 py-2.5 text-gray-700 max-w-[160px] truncate" title="${d.assignee}">${d.assignee || '-'}</td>
+                <td class="px-4 py-2.5 text-gray-600 max-w-[220px] truncate" title="${d.shortDescription}">${d.shortDescription || '-'}</td>
+                <td class="px-4 py-2.5">${remarkCell}</td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+
+    if (pageInfo) {
+        pageInfo.textContent = `แสดง ${(startIdx + 1).toLocaleString()} - ${endIdx.toLocaleString()} จาก ${lastFilteredFcrList.length.toLocaleString()} รายการ`;
+    }
+
+    if (paginationBtns) {
+        paginationBtns.innerHTML = `
+            <button onclick="gotoFcrTablePage(1)" ${fcrTablePage === 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">« แรกสุด</button>
+            <button onclick="changeFcrTablePage(-1)" ${fcrTablePage === 1 ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">‹ ก่อนหน้า</button>
+            <span class="px-2.5 py-1 font-semibold text-teal-700 text-xs">${fcrTablePage} / ${totalPages}</span>
+            <button onclick="changeFcrTablePage(1)" ${fcrTablePage === totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">ถัดไป ›</button>
+            <button onclick="gotoFcrTablePage(${totalPages})" ${fcrTablePage === totalPages ? 'disabled' : ''} class="px-2.5 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed">ท้ายสุด »</button>
+        `;
+    }
+
+    if (isAdmin) {
+        tbody.querySelectorAll('.fcr-remark-input').forEach(input => {
+            input.addEventListener('change', async e => {
+                const rowId = e.target.dataset.id;
+                const rec = processedFcrData.find(r => r._id === rowId);
+                if (rec) {
+                    rec.remark = e.target.value;
+                    await saveFcrDataToDB([rec]);
+                }
+            });
+        });
+    }
+}
+
+window.exportFcrToCSV = function() {
+    if (!lastFilteredFcrList.length) {
+        alert('ไม่มีข้อมูล %FCR ให้ Export');
+        return;
+    }
+    let csv = "\uFEFFNumber,Opened,Week,Channel,Service,Category,State,FCR Status,Application Acronym,Assignee,Short Description,Remarks\n";
+    lastFilteredFcrList.forEach(d => {
+        csv += [
+            `"${d.number}"`,
+            `"${d.opened}"`,
+            `"${d.weekKey}"`,
+            `"${d.channel}"`,
+            `"${d.service}"`,
+            `"${d.category}"`,
+            `"${d.state}"`,
+            `"${d.isRightFcr ? 'FCR (Counted)' : 'Non-FCR (Base Only)'}"`,
+            `"${d.applicationAcronym || ''}"`,
+            `"${d.assignee || ''}"`,
+            `"${(d.shortDescription || '').replace(/"/g, '""')}"`,
+            `"${(d.remark || '').replace(/"/g, '""')}"`
+        ].join(',') + "\n";
+    });
+    const a = document.createElement('a');
+    a.href = encodeURI("data:text/csv;charset=utf-8," + csv);
+    a.download = `FCR_Report_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+};

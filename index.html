@@ -63,7 +63,7 @@
                     <div class="flex items-center justify-between mb-3">
                         <div class="flex items-center gap-2">
                             <span class="text-xs font-bold text-brand-800 uppercase tracking-wider">📥 นำเข้าไฟล์ Excel ใหม่เข้าสู่ MongoDB</span>
-                            <span class="text-[10px] font-semibold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Auto-Detect 4 รูปแบบไฟล์</span>
+                            <span class="text-[10px] font-semibold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">Auto-Detect 5 รูปแบบไฟล์</span>
                         </div>
                     </div>
 
@@ -71,9 +71,9 @@
                         <svg class="w-8 h-8 text-brand-400 group-hover:scale-110 transition-transform mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
-                        <p class="text-xs font-semibold text-gray-700 group-hover:text-brand-700">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ Excel (.xlsx, .xls) มาวางที่นี่</p>
-                        <p class="text-[11px] text-gray-400 mt-0.5">รองรับไฟล์ Chat SLA, Task SLA (ServiceNow), Call Ring Time (CUIC), และ Abandoned Call Detail Report</p>
-                        <input type="file" id="reportFiles" accept=".xlsx, .xls" multiple class="hidden">
+                        <p class="text-xs font-semibold text-gray-700 group-hover:text-brand-700">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ Excel (.xlsx, .xls, .csv) มาวางที่นี่</p>
+                        <p class="text-[11px] text-gray-400 mt-0.5">รองรับไฟล์ First Response ECE, % Within SLA of 16 Apps, Call Not Received, Call Back (ABN), และ %FCR (Incident)</p>
+                        <input type="file" id="reportFiles" accept=".xlsx, .xls, .csv" multiple class="hidden">
                     </label>
                     <p id="fileNameDisplay" class="text-xs text-center text-brand-700 font-medium mt-2 min-h-[16px] truncate px-2"></p>
 
@@ -216,6 +216,13 @@
                         <span>Call Back (ABN Call of Ex)</span>
                         <span id="navBadgeAbandoned" class="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold hidden">0</span>
                     </button>
+                    <button id="tabBtnFcr" onclick="switchModuleTab('fcr')" class="module-tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>%FCR (Target&gt;90%)</span>
+                        <span id="navBadgeFcr" class="text-[9px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 font-bold hidden">0</span>
+                    </button>
                 </div>
             </div>
 
@@ -279,6 +286,13 @@
                                 <span>ลบเฉพาะ <b>Call Back (ABN Call of Ex)</b></span>
                             </span>
                             <span id="clearAbandonedCountBadge" class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-mono">0</span>
+                        </button>
+                        <button type="button" id="clearOnlyFcrBtn" class="w-full text-left px-3 py-2 hover:bg-red-50 text-gray-700 hover:text-red-600 flex items-center justify-between transition-colors">
+                            <span class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-teal-500"></span>
+                                <span>ลบเฉพาะ <b>%FCR (Target&gt;90%)</b></span>
+                            </span>
+                            <span id="clearFcrCountBadge" class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-mono">0</span>
                         </button>
                         <div class="my-1 border-t border-gray-100"></div>
                         <button type="button" id="clearAllDbDropdownBtn" class="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 font-semibold flex items-center gap-2 transition-colors">
@@ -1181,6 +1195,293 @@
                     </div>
 
                 </div>
+            </div>
+
+            <!-- ============================================================== -->
+            <!-- MODULE 5: %FCR (Target>90%) VIEW                               -->
+            <!-- ============================================================== -->
+            <div id="fcrModuleView" class="module-view hidden">
+
+                <!-- TOP FILTER BAR (FCR) -->
+                <div class="bg-white rounded-xl shadow-xs border border-gray-100 px-5 py-3 mb-5 flex flex-col gap-3">
+                    <!-- Row 1: Week Filters & Channel Group Filters -->
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <div class="flex items-center gap-1.5 mr-1">
+                                <svg class="w-4 h-4 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                <span class="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Week Filter:</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 flex-wrap" id="fcrWeekPills">
+                                <button class="quick-filter-btn active" data-week="all" onclick="setFcrWeekFilter('all')">All Weeks (ผลรวมทั้งหมด)</button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Channel Group:</span>
+                            <div class="flex items-center gap-1" id="fcrChannelGroupPills">
+                                <button class="quick-filter-btn active" data-chgroup="all" onclick="setFcrChannelGroupFilter('all')">All Channels</button>
+                                <button class="quick-filter-btn" data-chgroup="voice" onclick="setFcrChannelGroupFilter('voice')">📞 Voice (Phone)</button>
+                                <button class="quick-filter-btn" data-chgroup="line" onclick="setFcrChannelGroupFilter('line')">💬 Non Voice (LINE)</button>
+                                <button class="quick-filter-btn" data-chgroup="other" onclick="setFcrChannelGroupFilter('other')">📧 Email + Other</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: FCR Status Pills + Search + Export -->
+                    <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-2.5">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">FCR Filter:</span>
+                            <div class="flex items-center gap-1" id="fcrStatusPills">
+                                <button class="quick-filter-btn active" data-fcrstatus="all" onclick="setFcrStatusFilter('all')">All Base (ตัวหารทั้งหมด)</button>
+                                <button class="quick-filter-btn" data-fcrstatus="fcr" onclick="setFcrStatusFilter('fcr')">✅ นับเป็น FCR (ตัวตั้ง: RFI + Resolved/Closed)</button>
+                                <button class="quick-filter-btn" data-fcrstatus="non_fcr" onclick="setFcrStatusFilter('non_fcr')">⚠️ ไม่เข้าเงื่อนไข FCR (ส่วนต่าง)</button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <div class="relative">
+                                <input type="text" id="fcrSearchInput" placeholder="ค้นหา INC, Channel, Assignee, App..." class="text-xs pl-7 pr-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-teal-500 w-60 bg-gray-50/50">
+                                <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            </div>
+                            <button id="exportFcrCsvBtn" onclick="exportFcrToCSV()" class="bg-gray-800 hover:bg-gray-900 text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                <span>Export CSV</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5 KPI CARDS (%FCR Target > 90%) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
+                    <!-- Card 1: %FCR All Channel -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border-2 border-teal-200 p-4 cursor-default">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <div class="flex items-center gap-1.5">
+                                    <p class="text-[10px] font-bold text-teal-700 uppercase tracking-wider">%FCR All Channel</p>
+                                    <span id="fcrAllTargetBadge" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">Target &gt; 90%</span>
+                                </div>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <p class="text-2xl font-extrabold text-teal-700 kpi-number" id="fcrAllPctCard">0%</p>
+                                    <span class="text-xs font-semibold text-gray-400" id="fcrAllExactPctCard">(0.00%)</span>
+                                </div>
+                                <p class="text-[11px] text-gray-500 mt-0.5 font-medium" id="fcrAllRatioSub">0 / 0 เคส</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1.5 w-full bg-teal-100 rounded-full overflow-hidden"><div id="fcrAllBar" class="h-1.5 bg-teal-500 rounded-full" style="width: 0%"></div></div>
+                    </div>
+
+                    <!-- Card 2: -Voice (Phone) -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">-Voice (Phone)</p>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <p class="text-2xl font-bold text-indigo-600 kpi-number" id="fcrVoicePctCard">0%</p>
+                                    <span class="text-xs font-semibold text-gray-400" id="fcrVoiceExactPctCard">(0.00%)</span>
+                                </div>
+                                <p class="text-[11px] text-gray-500 mt-0.5 font-medium" id="fcrVoiceRatioSub">0 / 0 เคส</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1.5 w-full bg-indigo-100 rounded-full overflow-hidden"><div id="fcrVoiceBar" class="h-1.5 bg-indigo-500 rounded-full" style="width: 0%"></div></div>
+                    </div>
+
+                    <!-- Card 3: -Non Voice (Line) -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">-Non Voice (Line)</p>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <p class="text-2xl font-bold text-emerald-600 kpi-number" id="fcrLinePctCard">0%</p>
+                                    <span class="text-xs font-semibold text-gray-400" id="fcrLineExactPctCard">(0.00%)</span>
+                                </div>
+                                <p class="text-[11px] text-gray-500 mt-0.5 font-medium" id="fcrLineRatioSub">0 / 0 เคส</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1.5 w-full bg-emerald-100 rounded-full overflow-hidden"><div id="fcrLineBar" class="h-1.5 bg-emerald-500 rounded-full" style="width: 0%"></div></div>
+                    </div>
+
+                    <!-- Card 4: -Email + Other -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">-Email + Other</p>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <p class="text-2xl font-bold text-amber-600 kpi-number" id="fcrOtherPctCard">0%</p>
+                                    <span class="text-xs font-semibold text-gray-400" id="fcrOtherExactPctCard">(0.00%)</span>
+                                </div>
+                                <p class="text-[11px] text-gray-500 mt-0.5 font-medium" id="fcrOtherRatioSub">0 / 0 เคส</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1.5 w-full bg-amber-100 rounded-full overflow-hidden"><div id="fcrOtherBar" class="h-1.5 bg-amber-500 rounded-full" style="width: 0%"></div></div>
+                    </div>
+
+                    <!-- Card 5: Grand Total Cases -->
+                    <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">FCR / Total Base</p>
+                                <p class="text-xl font-bold text-gray-800 mt-1 kpi-number" id="fcrGrandCountsCard">0 / 0</p>
+                                <p class="text-[11px] text-red-500 mt-0.5 font-medium" id="fcrNonFcrDiffSub">ส่วนต่าง Non-FCR: 0 เคส</p>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <svg class="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            </div>
+                        </div>
+                        <div class="mt-2 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden"><div class="h-1.5 bg-gray-600 rounded-full w-full"></div></div>
+                    </div>
+                </div>
+
+                <!-- EXCEL PIVOT TABLES & SUMMARY SECTION -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5">
+                    
+                    <!-- Left Pivot Table: Total Base (ตัวหาร) -->
+                    <div class="lg:col-span-4 bg-white rounded-xl shadow-xs border border-orange-200 overflow-hidden flex flex-col">
+                        <div class="px-4 py-3 bg-orange-50/70 border-b border-orange-200">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-extrabold text-orange-900 uppercase">📊 ตาราง Pivot ซ้าย (ยอดรวม / ตัวหาร)</span>
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-orange-100 text-orange-800">Count of Number</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] bg-white/80 rounded-lg p-2.5 border border-orange-200/70">
+                                <div class="text-gray-500">Application Acronym:</div>
+                                <div class="font-bold text-gray-800">(All)</div>
+                                <div class="text-gray-500">Service:</div>
+                                <div class="font-bold text-orange-800">ตัด Tracking ออก</div>
+                                <div class="text-gray-500">Category:</div>
+                                <div class="font-bold text-orange-800">Email, Inquiry/Help, Software</div>
+                                <div class="text-gray-500">State:</div>
+                                <div class="font-bold text-gray-800">(All)</div>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead class="bg-[#d96b27] text-white">
+                                    <tr>
+                                        <th class="text-left px-4 py-2 font-bold">Row Labels (Channel)</th>
+                                        <th class="text-right px-4 py-2 font-bold">Count of Number</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fcrLeftPivotBody" class="divide-y divide-gray-100"></tbody>
+                                <tfoot id="fcrLeftPivotFoot" class="bg-orange-50/80 font-extrabold border-t-2 border-[#d96b27] text-gray-900"></tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right Pivot Table: FCR Cases (ตัวตั้ง) -->
+                    <div class="lg:col-span-4 bg-white rounded-xl shadow-xs border border-orange-200 overflow-hidden flex flex-col">
+                        <div class="px-4 py-3 bg-orange-50/70 border-b border-orange-200">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-extrabold text-orange-900 uppercase">🎯 ตาราง Pivot ขวา (นับเป็น FCR / ตัวตั้ง)</span>
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-teal-100 text-teal-800">RFI &amp; Resolved/Closed</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] bg-white/80 rounded-lg p-2.5 border border-orange-200/70">
+                                <div class="text-gray-500">Service:</div>
+                                <div class="font-bold text-teal-800">RFI &amp; Advisory Service</div>
+                                <div class="text-gray-500">Category:</div>
+                                <div class="font-bold text-teal-800">Email, Inquiry/Help, Software</div>
+                                <div class="text-gray-500">State:</div>
+                                <div class="font-bold text-teal-800">Resolved, Closed</div>
+                                <div class="text-gray-500">Target SLA:</div>
+                                <div class="font-bold text-emerald-700">&gt; 90%</div>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead class="bg-[#d96b27] text-white">
+                                    <tr>
+                                        <th class="text-left px-4 py-2 font-bold">Row Labels (Channel)</th>
+                                        <th class="text-right px-4 py-2 font-bold">Count of Number</th>
+                                        <th class="text-right px-4 py-2 font-bold">%FCR</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fcrRightPivotBody" class="divide-y divide-gray-100"></tbody>
+                                <tfoot id="fcrRightPivotFoot" class="bg-orange-50/80 font-extrabold border-t-2 border-[#d96b27] text-gray-900"></tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Summary Box: %FCR All Channel Table + Bar Chart -->
+                    <div class="lg:col-span-4 bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden flex flex-col">
+                        <div class="px-4 py-3 bg-gray-800 text-white flex items-center justify-between">
+                            <span class="text-xs font-extrabold uppercase tracking-wider">📌 สรุป %FCR All Channel (Target &gt; 90%)</span>
+                            <span id="fcrOverallPassBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500 text-white">PASS</span>
+                        </div>
+                        <div class="p-4 flex flex-col gap-4 flex-1">
+                            <!-- Exact Excel Summary Table -->
+                            <div class="border border-gray-200 rounded-lg overflow-hidden">
+                                <table class="w-full text-xs">
+                                    <thead class="bg-gray-200 text-gray-900 font-extrabold border-b border-gray-300">
+                                        <tr>
+                                            <th class="text-left px-3.5 py-2">%FCR All Channel</th>
+                                            <th class="text-right px-3.5 py-2">สัดส่วน (ขวา / ซ้าย)</th>
+                                            <th class="text-right px-3.5 py-2 text-sm" id="fcrSummaryHeaderPct">0%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="fcrSummaryGroupTableBody" class="divide-y divide-gray-100"></tbody>
+                                </table>
+                            </div>
+
+                            <!-- ApexChart for %FCR by Group -->
+                            <div class="flex-1 min-h-[175px]" id="fcrChannelGroupChart"></div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- FCR INCIDENT DETAILS TABLE (Paginated 50/page) -->
+                <div class="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
+                    <div class="px-5 py-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <div class="w-2.5 h-2.5 rounded-full bg-teal-500"></div>
+                            <h3 class="text-sm font-bold text-gray-800">รายการเคส Incident ที่ใช้คำนวณ %FCR (แสดงสถานะตัวตั้ง FCR / ตัวหาร)</h3>
+                            <span id="fcrTableCountBadge" class="text-[11px] bg-teal-50 text-teal-700 font-bold px-2.5 py-0.5 rounded-full border border-teal-200">0 รายการ</span>
+                        </div>
+                        <!-- Pagination Bar -->
+                        <div id="fcrTablePaginationBar" class="flex items-center gap-3 text-xs">
+                            <span id="fcrTablePageInfo" class="text-gray-500 text-[11px]"></span>
+                            <div id="fcrTablePaginationBtns" class="flex items-center gap-1"></div>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto custom-scrollbar" style="max-height: 460px;">
+                        <table class="w-full text-xs whitespace-nowrap">
+                            <thead class="sticky top-0 z-10 bg-gray-50 border-b border-gray-100">
+                                <tr>
+                                    <th class="text-center px-3 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">#</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Number (INC)</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Opened Date</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Week</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Channel</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Service</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Category</th>
+                                    <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">State</th>
+                                    <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-teal-700 uppercase bg-teal-50/50">สถานะ FCR</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">App Acronym</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Assignee</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Short Description</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fcrTableBody" class="divide-y divide-gray-50"></tbody>
+                        </table>
+                    </div>
+                    <div id="emptyFcrTableState" class="hidden p-8 text-center text-xs text-gray-400">
+                        ยังไม่มีข้อมูลเคสสำหรับคำนวณ %FCR (กรุณาอัปโหลดไฟล์ Incident สำหรับ FCR)
+                    </div>
+                </div>
+
             </div>
 
         </div>
