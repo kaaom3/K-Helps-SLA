@@ -227,13 +227,13 @@ function renderUploadLogsTable() {
 
         let modBadge = '';
         if (log.moduleType === 'chat' || log.store === 'sessions') {
-            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">💬 First Response ECE( ≥95 %)</span>`;
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">💬 First Response ECE By Agents</span>`;
         } else if (log.moduleType === 'task' || log.store === 'task_sla') {
             modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">🎫 % Within SLA of 16 Apps</span>`;
         } else if (log.moduleType === 'abandoned' || log.store === 'abandoned_calls') {
             modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">📵 Call Back (ABN Call of Ex)</span>`;
         } else if (log.moduleType === 'fcr' || log.store === 'fcr_cases') {
-            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">🎯 %FCR (Target&gt;90%)</span>`;
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">🎯 FCR By Agents</span>`;
         } else {
             modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">📞 Call Not Received (Within 12 Secs)</span>`;
         }
@@ -688,9 +688,10 @@ function updateNavBadges() {
         taskBadge.textContent = processedTaskData.length;
         taskBadge.classList.toggle('hidden', processedTaskData.length === 0);
     }
+    const activeCallData = getFilteredCallRecords();
     if (callBadge) {
-        callBadge.textContent = processedCallData.length;
-        callBadge.classList.toggle('hidden', processedCallData.length === 0);
+        callBadge.textContent = activeCallData.length;
+        callBadge.classList.toggle('hidden', activeCallData.length === 0);
     }
     if (abBadge) {
         abBadge.textContent = processedAbandonedData.length;
@@ -707,14 +708,14 @@ function updateNavBadges() {
     const dropFcrBadge = document.getElementById('clearFcrCountBadge');
     if (dropChatBadge) dropChatBadge.textContent = processedData.length;
     if (dropTaskBadge) dropTaskBadge.textContent = processedTaskData.length;
-    if (dropCallBadge) dropCallBadge.textContent = processedCallData.length;
+    if (dropCallBadge) dropCallBadge.textContent = activeCallData.length;
     if (dropAbandonedBadge) dropAbandonedBadge.textContent = processedAbandonedData.length;
     if (dropFcrBadge) dropFcrBadge.textContent = processedFcrData.length;
 
     const fileBadge = document.getElementById('fileLogCountBadge');
     if (fileBadge) fileBadge.textContent = uploadLogs.length;
 
-    const ring12sCount = processedCallData.filter(c => c.isRing12).length;
+    const ring12sCount = activeCallData.filter(c => c.isRing12).length;
     const pill12sCount = document.getElementById('pill12sCount');
     if (pill12sCount) pill12sCount.textContent = ring12sCount;
 }
@@ -883,7 +884,7 @@ async function handleDataProcessingFrom(fileInput) {
 
             if (detected.type === 'chat') {
                 storeName = storeChat;
-                moduleLabel = 'First Response ECE( ≥95 %)';
+                moduleLabel = 'First Response ECE By Agents';
                 lastImportedModule = 'chatSla';
                 detected.data.forEach(rec => {
                     rec._fileId = fileId;
@@ -927,7 +928,7 @@ async function handleDataProcessingFrom(fileInput) {
                 });
             } else if (detected.type === 'fcr') {
                 storeName = storeFcr;
-                moduleLabel = '%FCR (Target>90%)';
+                moduleLabel = 'FCR By Agents';
                 lastImportedModule = 'fcr';
                 detected.data.forEach(rec => {
                     rec._fileId = fileId;
@@ -2258,12 +2259,24 @@ function exportTaskToCSV() {
 }
 
 // ─── MODULE 3: Call Ring Time (CUIC) UI & Logic ─────────────
+function isCuicExpertRecord(c) {
+    if (!c) return false;
+    const app = String(c.applicationName || '').toLowerCase();
+    const csq = String(c.csqNames || '').toLowerCase();
+    const called = String(c.calledNumber || '').trim();
+    return app.includes('khelps_expert') || csq.includes('khelps_expert') || called === '14903';
+}
+
+function getFilteredCallRecords() {
+    return processedCallData.filter(d => !isCuicExpertRecord(d));
+}
+
 function setupCallWeekFilters() {
     const container = document.getElementById('callWeekPills');
     if (!container) return;
 
     const weekMap = new Map();
-    processedCallData.forEach(d => {
+    getFilteredCallRecords().forEach(d => {
         if (!weekMap.has(d.weekKey)) {
             weekMap.set(d.weekKey, {
                 key: d.weekKey,
@@ -2347,7 +2360,8 @@ window.gotoCallTablePage = function(page) {
 function updateCallDashboardView() {
     enrichAbandonedWithCuic();
 
-    if (!processedCallData.length) {
+    const activeCallData = getFilteredCallRecords();
+    if (!activeCallData.length) {
         animateNumber('callTotalCard', 0);
         animateNumber('call12sCard', 0);
         animateNumber('callNormalCard', 0);
@@ -2361,8 +2375,8 @@ function updateCallDashboardView() {
 
     const searchQuery = (document.getElementById('callSearchInput')?.value || '').trim().toLowerCase();
 
-    // Base filter by week
-    let weekFiltered = processedCallData;
+    // Base filter by week (excluding Khelps_Expert)
+    let weekFiltered = activeCallData;
     if (callFilterWeek !== 'all') {
         weekFiltered = weekFiltered.filter(d => d.weekKey === callFilterWeek);
     }
@@ -2519,7 +2533,7 @@ function renderWeeklyComparisonMatrix(filteredData) {
 
     // Collect all unique weeks in entire dataset sorted chronologically
     const weekMap = new Map();
-    processedCallData.forEach(d => {
+    getFilteredCallRecords().forEach(d => {
         if (!weekMap.has(d.weekKey)) {
             weekMap.set(d.weekKey, d.weekLabel);
         }
@@ -2719,7 +2733,7 @@ function renderWeeklyComparisonChart(filteredData) {
 
     // Collect all unique weeks in entire dataset sorted chronologically
     const weekMap = new Map();
-    processedCallData.forEach(d => {
+    getFilteredCallRecords().forEach(d => {
         if (!weekMap.has(d.weekKey)) {
             weekMap.set(d.weekKey, d.weekLabel);
         }
@@ -3158,12 +3172,13 @@ window.exportAbandonedToCSV = function() {
 };
 
 function exportCallToCSV() {
-    if (!processedCallData.length) {
+    const activeData = getFilteredCallRecords();
+    if (!activeData.length) {
         alert('ไม่มีข้อมูล Call Report ให้ Export');
         return;
     }
     let csv = "\uFEFFSession ID,Call Start Time,Call End Time,Week,Agent Name,CSQ Names,Calling Number,Ring Time,Ring Time (s),Is Ring 12s,Talk Time,Work Time,Remarks\n";
-    processedCallData.forEach(d => {
+    activeData.forEach(d => {
         csv += [
             `"${d.sessionId}"`,
             `"${d.callStartTime}"`,
