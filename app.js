@@ -217,13 +217,13 @@ function renderUploadLogsTable() {
 
         let modBadge = '';
         if (log.moduleType === 'chat' || log.store === 'sessions') {
-            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">💬 Chat SLA</span>`;
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">💬 First Response ECE( ≥95 %)</span>`;
         } else if (log.moduleType === 'task' || log.store === 'task_sla') {
-            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">🎫 Task SLA</span>`;
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">🎫 % Within SLA of 16 Apps</span>`;
         } else if (log.moduleType === 'abandoned' || log.store === 'abandoned_calls') {
-            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">📵 Abandoned Call</span>`;
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">📵 Call Back (ABN Call of Ex)</span>`;
         } else {
-            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">📞 Call Ring (CUIC)</span>`;
+            modBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">📞 Call Not Received (Within 12 Secs)</span>`;
         }
 
         const dtStr = log.uploadedAt ? moment(log.uploadedAt).format('DD/MM/YYYY HH:mm:ss') : '-';
@@ -347,11 +347,27 @@ async function loadDataFromDB() {
     updateDbStatusUI(true);
     processedData = json.chatSla || [];
     processedTaskData = filterValidTasks(json.taskSla || []);
-    processedCallData = json.callReport || [];
+    processedCallData = (json.callReport || []).map(d => {
+        const m = parseCallDateTime(d.callStartTime || d.callStartDate);
+        if (m && m.isValid()) {
+            const wInfo = computeMonthWeekInfo(m);
+            d.weekKey = wInfo.weekKey;
+            d.weekLabel = wInfo.weekLabel;
+        }
+        return d;
+    });
     // เอาเฉพาะ Call Skills / CSQ ที่เป็น Khelps_Expert เท่านั้น
     processedAbandonedData = (json.abandonedCalls || []).filter(d => {
         const sk = String(d.callSkills || d.callRoutedCsq || '').toLowerCase();
         return sk.includes('khelps_expert');
+    }).map(d => {
+        const m = parseCallDateTime(d.callStartTime || d.callStartDate);
+        if (m && m.isValid()) {
+            const wInfo = computeMonthWeekInfo(m);
+            d.weekKey = wInfo.weekKey;
+            d.weekLabel = wInfo.weekLabel;
+        }
+        return d;
     });
     uploadLogs = json.uploadLogs || [];
     enrichAbandonedWithCuic();
@@ -783,7 +799,7 @@ async function handleDataProcessingFrom(fileInput) {
 
             if (detected.type === 'chat') {
                 storeName = storeChat;
-                moduleLabel = 'Chat SLA (≤8m)';
+                moduleLabel = 'First Response ECE( ≥95 %)';
                 lastImportedModule = 'chatSla';
                 detected.data.forEach(rec => {
                     rec._fileId = fileId;
@@ -794,7 +810,7 @@ async function handleDataProcessingFrom(fileInput) {
                 });
             } else if (detected.type === 'task') {
                 storeName = storeTask;
-                moduleLabel = 'Task SLA (Incident)';
+                moduleLabel = '% Within SLA of 16 Apps';
                 lastImportedModule = 'taskSla';
                 detected.data.forEach(rec => {
                     rec._fileId = fileId;
@@ -805,7 +821,7 @@ async function handleDataProcessingFrom(fileInput) {
                 });
             } else if (detected.type === 'call') {
                 storeName = storeCall;
-                moduleLabel = 'Call Ring Time (CUIC)';
+                moduleLabel = 'Call Not Received (Within 12 Secs)';
                 lastImportedModule = 'callReport';
                 detected.data.forEach(rec => {
                     rec._fileId = fileId;
@@ -816,7 +832,7 @@ async function handleDataProcessingFrom(fileInput) {
                 });
             } else if (detected.type === 'abandoned') {
                 storeName = storeAbandoned;
-                moduleLabel = 'Abandoned (Khelps_Expert)';
+                moduleLabel = 'Call Back (ABN Call of Ex)';
                 lastImportedModule = 'abandonedCall';
                 detected.data.forEach(rec => {
                     rec._fileId = fileId;
@@ -1224,12 +1240,35 @@ function parseCallDateTime(val) {
         'M/D/YY h:mm:ss A', 'M/D/YYYY h:mm:ss A',
         'M/D/YY h:mm A',    'M/D/YYYY h:mm A',
         'M/D/YY HH:mm:ss',  'M/D/YYYY HH:mm:ss',
-        'YYYY-MM-DD HH:mm:ss', 'DD/MM/YYYY HH:mm:ss',
-        'DD-MM-YYYY HH:mm:ss', 'MM/DD/YYYY HH:mm:ss'
+        'YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DD',
+        'DD/MM/YYYY HH:mm:ss', 'DD-MM-YYYY HH:mm:ss',
+        'MM/DD/YYYY HH:mm:ss'
     ];
     let m = moment(str, formats, true);
     if (!m.isValid()) m = moment(str);
     return m.isValid() ? m : null;
+}
+
+// คำนวณสัปดาห์ของเดือน เช่น สัปดาห์ที่ 1 (1/10/26 - 04/10/26)
+function computeMonthWeekInfo(startMoment) {
+    const monthStart = startMoment.clone().startOf('month');
+    const monthEnd   = startMoment.clone().endOf('month');
+    const isoStart   = startMoment.clone().startOf('isoWeek');
+    const isoEnd     = startMoment.clone().endOf('isoWeek');
+
+    const clampedStart = moment.max(isoStart, monthStart);
+    const clampedEnd   = moment.min(isoEnd, monthEnd);
+
+    const weekOfMonth = Math.ceil((startMoment.date() + monthStart.isoWeekday() - 1) / 7);
+    const weekKey = `${startMoment.format('YYYY-MM')}-W${weekOfMonth}`;
+
+    const startStr = clampedStart.date() === 1
+        ? clampedStart.format('D/MM/YY')
+        : clampedStart.format('DD/MM/YY');
+    const endStr = clampedEnd.format('DD/MM/YY');
+    const weekLabel = `สัปดาห์ที่ ${weekOfMonth} (${startStr} - ${endStr})`;
+
+    return { weekOfMonth, weekKey, weekLabel };
 }
 
 function parseCallReportRows(rawData) {
@@ -1261,12 +1300,7 @@ function parseCallReportRows(rawData) {
         const talkSec  = parseDurationToSeconds(r['Talk Time']);
         const workSec  = parseDurationToSeconds(r['Work Time']);
 
-        const weekYear = startMoment.isoWeekYear();
-        const isoW = startMoment.isoWeek();
-        const weekKey = `${weekYear}-W${String(isoW).padStart(2, '0')}`;
-        const weekStartStr = startMoment.clone().startOf('isoWeek').format('DD/MM');
-        const weekEndStr = startMoment.clone().endOf('isoWeek').format('DD/MM');
-        const weekLabel = `สัปดาห์ที่ ${isoW} (${weekStartStr} - ${weekEndStr})`;
+        const { weekKey, weekLabel } = computeMonthWeekInfo(startMoment);
 
         // Unique ID per leg to prevent Cisco multi-leg calls (e.g. RNA -> Transfer) from overwriting each other
         const agentSlug = agentName.replace(/\s+/g, '_');
@@ -1339,12 +1373,7 @@ function parseAbandonedReportRows(rawData) {
         const timeToAbandonSec = parseDurationToSeconds(r['Average Time to Abandoned']);
         const timeToAbandonFormatted = formatSecondsToHMS(timeToAbandonSec);
 
-        const weekYear = startMoment.isoWeekYear();
-        const isoW = startMoment.isoWeek();
-        const weekKey = `${weekYear}-W${String(isoW).padStart(2, '0')}`;
-        const weekStartStr = startMoment.clone().startOf('isoWeek').format('DD/MM');
-        const weekEndStr = startMoment.clone().endOf('isoWeek').format('DD/MM');
-        const weekLabel = `สัปดาห์ที่ ${isoW} (${weekStartStr} - ${weekEndStr})`;
+        const { weekKey, weekLabel } = computeMonthWeekInfo(startMoment);
 
         const skillSlug = callSkills.replace(/\s+/g, '_');
         const baseKey = `ab_${startMoment.format('YYYYMMDD_HHmmss')}_${callAni}_${skillSlug}`;
