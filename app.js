@@ -3007,35 +3007,6 @@ function updateAbandonedDashboardView() {
     if (avgWaitEl) avgWaitEl.textContent = formatSecondsToHMS(avgWaitSec);
     animateNumber('abCuicExpertTotalCard', cuicExpertList.length);
 
-    if (summaryBadge) {
-        summaryBadge.textContent = `Khelps_Expert Abandoned: ${totalExpertAb} สาย | งาน Khelps_Expert ใน CUIC: ${cuicExpertList.length} สาย`;
-    }
-
-    // Context Banner explanation for Khelps_Expert
-    if (banner) {
-        if (expertAbList.length > 0) {
-            const first = expertAbList[0];
-            banner.innerHTML = `
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                        <b>🎯 ข้อมูลเฉพาะ Call Skills / CSQ = <span class="text-indigo-700 underline">Khelps_Expert</span>:</b>
-                        พบสาย Abandoned จำนวน <b>${totalExpertAb} รายการ</b>
-                        — เบอร์โทร <b>${first.callAni}</b> (โทรเข้าเบอร์ <b>${first.calledNumber || '14903'}</b>) เวลา <b>${first.callStartDate} ${first.callStartTimeOnly} - ${first.callAbandonTimeOnly}</b>
-                        | Agent: <b>${first.agentName}</b> | เวลารอก่อนวางสาย (Time to Abandon): <b>${first.timeToAbandonFormatted} (${first.timeToAbandonSec} วินาที)</b>
-                        | <b>Ring Time: ${first.isMatchedCuic ? first.cuicRingTimeFormatted : '0:00:00 (วางสายก่อน 12 วินาที / ในคิว)'}</b>
-                    </div>
-                </div>
-            `;
-        } else {
-            banner.innerHTML = `
-                <div>
-                    <b>🎯 ข้อมูลเฉพาะ Call Skills / CSQ = <span class="text-indigo-700 underline">Khelps_Expert</span>:</b>
-                    แสดงเฉพาะข้อมูลของ Skill <b>Khelps_Expert</b> อย่างเดียวตามเงื่อนไขที่กำหนด
-                </div>
-            `;
-        }
-    }
-
     const isAdmin = userRole === 'admin';
 
     // Render Table 1: Abandoned Call (Khelps_Expert Only)
@@ -3051,19 +3022,19 @@ function updateAbandonedDashboardView() {
 
             const sessionBadge = d.isMatchedCuic
                 ? `<span class="px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono font-bold text-[11px] inline-flex items-center gap-1">✅ ${d.cuicSessionId}</span>`
-                : `<div class="flex flex-col"><span class="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px] inline-block w-fit">⚠️ วางสายในคิว (Queue Abandon)</span><span class="text-[10px] text-gray-400 mt-0.5">ไม่มีเลข Session เดี่ยวในไฟล์ CUIC</span></div>`;
+                : `<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px] inline-block w-fit">Queue Abandon</span>`;
 
             let ringTimeHtml = '';
             if (d.isMatchedCuic) {
                 if (d.cuicRingTimeSec >= 12) {
-                    ringTimeHtml = `<span class="ring-12-badge text-xs px-2.5 py-1 font-bold">🔴 ${d.cuicRingTimeFormatted} (ครบ 12 วิพอดี)</span>`;
+                    ringTimeHtml = `<span class="ring-12-badge text-xs px-2.5 py-1 font-bold">🔴 ${d.cuicRingTimeFormatted}</span>`;
                 } else if (d.cuicRingTimeSec > 0) {
-                    ringTimeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">🟠 ${d.cuicRingTimeFormatted} (วางก่อน 12 วิ)</span>`;
+                    ringTimeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">🟠 ${d.cuicRingTimeFormatted}</span>`;
                 } else {
-                    ringTimeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-300">⚪ 0:00:00 (วางก่อนสายดัง)</span>`;
+                    ringTimeHtml = `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-300">0:00:00</span>`;
                 }
             } else {
-                ringTimeHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200" title="สายวางในคิวก่อนเข้าเครื่อง Agent หรือรอคิว ${d.timeToAbandonFormatted}">0:00:00 (วางสายก่อน 12 วิ / ในคิว)</span>`;
+                ringTimeHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">0:00:00</span>`;
             }
 
             const remarkCell = isAdmin
@@ -3116,7 +3087,7 @@ function updateAbandonedDashboardView() {
     // Render Table 2: CUIC Khelps_Expert Reference Table (Strictly Khelps_Expert Only)
     if (refTableBody) {
         if (refTitle) {
-            refTitle.textContent = `รายการงานในไฟล์ CUIC เฉพาะ CSQ / Application = "Khelps_Expert" (แสดง Ring Time)`;
+            refTitle.textContent = `รายการงานในไฟล์ CUIC (Khelps_Expert)`;
         }
         if (refCountBadge) {
             refCountBadge.textContent = `${cuicExpertList.length} รายการ`;
@@ -3132,8 +3103,8 @@ function updateAbandonedDashboardView() {
                     ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">1 (Abandoned)</span>`
                     : `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">2 (Handled)</span>`;
                 const rBadge = c.ringTimeSec >= 12
-                    ? `<span class="ring-12-badge text-xs px-2.5 py-0.5 font-bold">🔴 ${c.ringTimeFormatted} (≥ 12s)</span>`
-                    : `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">⏱️ ${c.ringTimeFormatted} (&lt; 12s)</span>`;
+                    ? `<span class="ring-12-badge text-xs px-2.5 py-0.5 font-bold">🔴 ${c.ringTimeFormatted}</span>`
+                    : `<span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">⏱️ ${c.ringTimeFormatted}</span>`;
 
                 refHtml += `
                     <tr class="${rowClass}">
