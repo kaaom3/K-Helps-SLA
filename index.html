@@ -764,9 +764,11 @@
                             <div class="flex items-center gap-2 shrink-0">
                                 <svg class="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                 <span class="text-[11px] font-bold text-gray-700 uppercase tracking-wider">เลือกสัปดาห์ (Week):</span>
+                                <span class="text-[10px] text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md font-medium border border-purple-100 hidden sm:inline-block">💡 คลิกเลือกหลายสัปดาห์เพื่อเทียบกันได้</span>
+                                <span id="callSelectedWeeksBadge" class="hidden text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full border border-purple-200"></span>
                             </div>
                             <div class="flex items-center gap-1.5 flex-wrap" id="callWeekPills">
-                                <button class="quick-filter-btn active" data-week="all" onclick="setCallWeekFilter('all')">All Weeks (ผลรวมทั้งหมด)</button>
+                                <button class="call-week-btn active" data-week="all" onclick="resetCallWeekFilter()">All Weeks (ผลรวมทั้งหมด)</button>
                             </div>
                         </div>
 
@@ -912,6 +914,9 @@
                         <!-- VIEW 1: WEEKLY COMPARISON MATRIX CONTAINER -->
                         <div id="callMatrixViewContainer" class="flex flex-col gap-5">
                             
+                            <!-- Executive Comparison Summary Card -->
+                            <div id="callComparisonSummaryContainer"></div>
+
                             <!-- Comparison Chart -->
                             <div class="bg-white rounded-xl shadow-xs border border-gray-100 p-4">
                                 <div class="flex items-center justify-between mb-2">

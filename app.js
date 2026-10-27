@@ -20,7 +20,9 @@ let selectedTaskGroups = new Set();
 let selectedCallAgents = new Set();
 let taskFilterPriority = 'all';
 let taskFilterOutcome = 'all';
-let callFilterWeek = 'all'; // 'all' or weekKey (e.g. '2026-W40')
+let selectedCallWeeks = new Set(); // Multi-week selection Set(weekKeys). Empty = all weeks
+let callFilterWeek = 'all'; // Kept for backwards compatibility ('all', weekKey, or 'multi')
+let lastCallComparisonSummaryText = ''; // Stored formatted text for clipboard copying
 let callFilterRing = 'all'; // 'all', '12s', 'normal'
 let callViewMode = 'comparison'; // 'comparison' or 'details'
 let abandonedFilterWeek = 'all'; // 'all' or weekKey (for Abandoned Khelps_Expert tab)
@@ -764,6 +766,8 @@ async function handleClearCallData() {
     await clearCallStore();
     await loadDataFromDB();
     selectedCallAgents.clear();
+    selectedCallWeeks.clear();
+    callFilterWeek = 'all';
     updateNavBadges();
     renderUploadLogsTable();
     updateCallDashboardView();
@@ -2280,7 +2284,7 @@ function setupCallWeekFilters() {
         if (!weekMap.has(d.weekKey)) {
             weekMap.set(d.weekKey, {
                 key: d.weekKey,
-                label: d.weekLabel,
+                label: d.weekLabel || d.weekKey,
                 total: 0,
                 ring12: 0
             });
@@ -2291,22 +2295,80 @@ function setupCallWeekFilters() {
     });
 
     const sortedWeeks = Array.from(weekMap.values()).sort((a, b) => a.key.localeCompare(b.key));
+    const isAll = selectedCallWeeks.size === 0;
 
-    let html = `<button class="quick-filter-btn ${callFilterWeek === 'all' ? 'active' : ''}" data-week="all" onclick="setCallWeekFilter('all')">All Weeks (ผลรวมทั้งหมด)</button>`;
+    let html = `<button class="call-week-btn ${isAll ? 'active' : ''}" data-week="all" onclick="resetCallWeekFilter()">All Weeks (ผลรวมทั้งหมด)</button>`;
 
     sortedWeeks.forEach(w => {
-        const badge = w.ring12 > 0 ? ` <span class="text-red-600 font-bold">(${w.ring12} 🔴)</span>` : '';
-        html += `<button class="quick-filter-btn ${callFilterWeek === w.key ? 'active' : ''}" data-week="${w.key}" onclick="setCallWeekFilter('${w.key}')">${w.label}${badge}</button>`;
+        const isSelected = selectedCallWeeks.has(w.key);
+        const badge = w.ring12 > 0 ? ` <span class="text-red-500 font-bold">(${w.ring12} 🔴)</span>` : '';
+        const checkIcon = isSelected ? `<span class="inline-block mr-1 text-[11px] font-black">✓</span>` : '';
+        html += `<button class="call-week-btn ${isSelected ? 'active' : ''}" data-week="${w.key}" onclick="handleCallWeekClick(event, '${w.key}')" title="คลิกเพื่อเลือกหรือยกเลิกสัปดาห์ (Alt+คลิก เพื่อดูเฉพาะสัปดาห์นี้)">${checkIcon}${w.label}${badge}</button>`;
     });
 
+    if (selectedCallWeeks.size > 0) {
+        html += `<button class="text-[11px] font-semibold text-gray-500 hover:text-red-600 px-2 py-1 transition-colors flex items-center gap-1 cursor-pointer" onclick="resetCallWeekFilter()" title="ล้างการเลือกเพื่อดูผลรวมทั้งหมด">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+            <span>ล้างตัวเลือก</span>
+        </button>`;
+    }
+
     container.innerHTML = html;
+
+    const statusBadge = document.getElementById('callSelectedWeeksBadge');
+    if (statusBadge) {
+        if (selectedCallWeeks.size > 1) {
+            statusBadge.textContent = `เทียบ ${selectedCallWeeks.size} สัปดาห์`;
+            statusBadge.classList.remove('hidden');
+        } else if (selectedCallWeeks.size === 1) {
+            statusBadge.textContent = `เลือก 1 สัปดาห์`;
+            statusBadge.classList.remove('hidden');
+        } else {
+            statusBadge.classList.add('hidden');
+        }
+    }
 }
 
-window.setCallWeekFilter = function(weekKey) {
+window.handleCallWeekClick = function(event, weekKey) {
+    if (event && (event.altKey || event.metaKey)) {
+        // Alt-click solo select
+        callTablePage = 1;
+        selectedCallWeeks.clear();
+        selectedCallWeeks.add(weekKey);
+        callFilterWeek = weekKey;
+        setupCallWeekFilters();
+        updateCallDashboardView();
+        return;
+    }
+    toggleCallWeekFilter(weekKey);
+};
+
+window.toggleCallWeekFilter = function(weekKey) {
     callTablePage = 1;
-    callFilterWeek = weekKey;
+    if (selectedCallWeeks.has(weekKey)) {
+        selectedCallWeeks.delete(weekKey);
+    } else {
+        selectedCallWeeks.add(weekKey);
+    }
+    callFilterWeek = selectedCallWeeks.size === 1 ? Array.from(selectedCallWeeks)[0] : (selectedCallWeeks.size === 0 ? 'all' : 'multi');
     setupCallWeekFilters();
     updateCallDashboardView();
+};
+
+window.resetCallWeekFilter = function() {
+    callTablePage = 1;
+    selectedCallWeeks.clear();
+    callFilterWeek = 'all';
+    setupCallWeekFilters();
+    updateCallDashboardView();
+};
+
+window.setCallWeekFilter = function(weekKey) {
+    if (weekKey === 'all') {
+        resetCallWeekFilter();
+    } else {
+        toggleCallWeekFilter(weekKey);
+    }
 };
 
 window.setCallRingFilter = function(status) {
@@ -2368,7 +2430,8 @@ function updateCallDashboardView() {
         document.getElementById('call12sRateCard').textContent = '0%';
         document.getElementById('callAvgRingCard').textContent = '0s';
         renderCallAgentSidebar([]);
-        renderWeeklyComparisonMatrix([]);
+        renderCallComparisonSummary([], []);
+        renderWeeklyComparisonMatrix([], []);
         renderCallTable([]);
         return;
     }
@@ -2377,8 +2440,8 @@ function updateCallDashboardView() {
 
     // Base filter by week (excluding Khelps_Expert)
     let weekFiltered = activeCallData;
-    if (callFilterWeek !== 'all') {
-        weekFiltered = weekFiltered.filter(d => d.weekKey === callFilterWeek);
+    if (selectedCallWeeks.size > 0) {
+        weekFiltered = weekFiltered.filter(d => selectedCallWeeks.has(d.weekKey));
     }
 
     // Sidebar renders based on weekFiltered
@@ -2445,8 +2508,11 @@ function updateCallDashboardView() {
 
     // Render Views (Lazy rendering: only render the active view mode for instant UI performance)
     if (callViewMode === 'comparison') {
-        renderWeeklyComparisonMatrix(filtered);
-        renderWeeklyComparisonChart(filtered);
+        const allWeeks = Array.from(new Set(activeCallData.map(d => d.weekKey))).sort();
+        const displayWeeks = (selectedCallWeeks.size > 0) ? Array.from(selectedCallWeeks).sort() : allWeeks;
+        renderCallComparisonSummary(displayWeeks, activeCallData);
+        renderWeeklyComparisonMatrix(filtered, displayWeeks);
+        renderWeeklyComparisonChart(filtered, displayWeeks);
     } else {
         renderCallTable(filtered);
     }
@@ -2524,7 +2590,400 @@ window.selectAllCallAgents = function() {
     updateCallDashboardView();
 };
 
-function renderWeeklyComparisonMatrix(filteredData) {
+function renderCallComparisonSummary(displayWeeks, allCallData) {
+    const container = document.getElementById('callComparisonSummaryContainer');
+    if (!container) return;
+
+    if (!allCallData || !allCallData.length || !displayWeeks || !displayWeeks.length) {
+        container.innerHTML = '';
+        lastCallComparisonSummaryText = '';
+        return;
+    }
+
+    // Collect week labels
+    const weekLabelMap = new Map();
+    allCallData.forEach(d => {
+        if (!weekLabelMap.has(d.weekKey)) {
+            weekLabelMap.set(d.weekKey, d.weekLabel || d.weekKey);
+        }
+    });
+
+    // Compute stats per week for displayWeeks
+    const statsPerWeek = {};
+    displayWeeks.forEach(wKey => {
+        statsPerWeek[wKey] = {
+            key: wKey,
+            label: weekLabelMap.get(wKey) || wKey,
+            total: 0,
+            ring12: 0,
+            normal: 0,
+            ringSecSum: 0,
+            agentStats: {}
+        };
+    });
+
+    allCallData.forEach(d => {
+        if (statsPerWeek[d.weekKey]) {
+            const st = statsPerWeek[d.weekKey];
+            st.total++;
+            st.ringSecSum += (d.ringTimeSec || 0);
+            const ag = d.agentName || 'Unknown Agent';
+            if (!st.agentStats[ag]) st.agentStats[ag] = { total: 0, ring12: 0 };
+            st.agentStats[ag].total++;
+
+            if (d.isRing12) {
+                st.ring12++;
+                st.agentStats[ag].ring12++;
+            } else {
+                st.normal++;
+            }
+        }
+    });
+
+    displayWeeks.forEach(wKey => {
+        const st = statsPerWeek[wKey];
+        st.ring12Pct = st.total > 0 ? (st.ring12 / st.total * 100) : 0;
+        st.avgRingSec = st.total > 0 ? (st.ringSecSum / st.total).toFixed(1) : '0.0';
+    });
+
+    if (displayWeeks.length >= 2) {
+        const wFirst = statsPerWeek[displayWeeks[0]];
+        const wLast = statsPerWeek[displayWeeks[displayWeeks.length - 1]];
+
+        const diff12 = wLast.ring12 - wFirst.ring12;
+        const diffCalls = wLast.total - wFirst.total;
+        const diffRate = (wLast.ring12Pct - wFirst.ring12Pct).toFixed(2);
+        const diffAvgSec = (parseFloat(wLast.avgRingSec) - parseFloat(wFirst.avgRingSec)).toFixed(1);
+
+        const pctChange12 = wFirst.ring12 > 0 
+            ? (((wLast.ring12 - wFirst.ring12) / wFirst.ring12) * 100).toFixed(1) 
+            : (wLast.ring12 > 0 ? '+100' : '0');
+        const pctChangeCalls = wFirst.total > 0 
+            ? (((wLast.total - wFirst.total) / wFirst.total) * 100).toFixed(1) 
+            : '0';
+
+        // Agent changes between earliest and latest selected weeks
+        const allAgentNames = new Set([
+            ...Object.keys(wFirst.agentStats),
+            ...Object.keys(wLast.agentStats)
+        ]);
+        const agentDeltas = [];
+        allAgentNames.forEach(name => {
+            const c1 = wFirst.agentStats[name]?.ring12 || 0;
+            const c2 = wLast.agentStats[name]?.ring12 || 0;
+            const delta = c2 - c1;
+            if (c1 > 0 || c2 > 0) {
+                agentDeltas.push({ name, c1, c2, delta });
+            }
+        });
+
+        const improvedAgents = agentDeltas.filter(a => a.delta < 0).sort((a, b) => a.delta - b.delta);
+        const worsenedAgents = agentDeltas.filter(a => a.delta > 0).sort((a, b) => b.delta - a.delta);
+
+        // Plain text for clipboard copying
+        let copyText = `📊 สรุปผลเปรียบเทียบ Call Not Received (Within 12 Secs)\n`;
+        copyText += `🗓️ เปรียบเทียบ: ${wFirst.label} ➔ ${wLast.label} (${displayWeeks.length} สัปดาห์)\n`;
+        copyText += `─────────────────────────────────────────\n`;
+        copyText += `🔴 สาย Ring ≥ 12s:\n`;
+        copyText += `   • ${wFirst.label}: ${wFirst.ring12} สาย (${wFirst.ring12Pct.toFixed(1)}%)\n`;
+        copyText += `   • ${wLast.label}: ${wLast.ring12} สาย (${wLast.ring12Pct.toFixed(1)}%)\n`;
+        if (diff12 < 0) {
+            copyText += `   • ผลต่าง: ลดลง ${Math.abs(diff12)} สาย (${pctChange12}%) 🟢 พัฒนาดีขึ้น\n`;
+        } else if (diff12 > 0) {
+            copyText += `   • ผลต่าง: เพิ่มขึ้น +${diff12} สาย (+${pctChange12}%) 🔺 ต้องติดตาม\n`;
+        } else {
+            copyText += `   • ผลต่าง: เท่าเดิม (0 สาย) ➖\n`;
+        }
+        copyText += `\n📞 สายทั้งหมด (Total Calls):\n`;
+        copyText += `   • ${wFirst.label}: ${wFirst.total.toLocaleString()} สาย ➔ ${wLast.label}: ${wLast.total.toLocaleString()} สาย (ผลต่าง: ${diffCalls >= 0 ? '+' : ''}${diffCalls.toLocaleString()} สาย, ${pctChangeCalls}%)\n`;
+        copyText += `\n⏱️ เวลา Ring Time เฉลี่ย:\n`;
+        copyText += `   • ${wFirst.label}: ${wFirst.avgRingSec}s ➔ ${wLast.label}: ${wLast.avgRingSec}s (${diffAvgSec >= 0 ? '+' : ''}${diffAvgSec}s)\n`;
+
+        if (improvedAgents.length > 0) {
+            copyText += `\n🟢 Agent ที่พัฒนาดีขึ้น (สาย 12s ลดลง):\n`;
+            copyText += `   ${improvedAgents.map(a => `${a.name} (${a.c1}➔${a.c2} สาย, ${a.delta})`).join(', ')}\n`;
+        }
+        if (worsenedAgents.length > 0) {
+            copyText += `\n🔴 Agent ที่ต้องติดตาม (สาย 12s เพิ่มขึ้น):\n`;
+            copyText += `   ${worsenedAgents.map(a => `${a.name} (${a.c1}➔${a.c2} สาย, +${a.delta})`).join(', ')}\n`;
+        }
+        copyText += `─────────────────────────────────────────`;
+        lastCallComparisonSummaryText = copyText;
+
+        let statusBadgeHtml = '';
+        if (diff12 < 0) {
+            statusBadgeHtml = `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                ลดลง ${Math.abs(diff12)} สาย (${pctChange12}%) 🟢 ดีขึ้น
+            </span>`;
+        } else if (diff12 > 0) {
+            statusBadgeHtml = `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-red-100 text-red-800 border border-red-300">
+                <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                เพิ่มขึ้น +${diff12} สาย (+${pctChange12}%) 🔺 เฝ้าระวัง
+            </span>`;
+        } else {
+            statusBadgeHtml = `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 border border-gray-300">
+                <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                คงที่เท่าเดิม (0 สาย) ➖
+            </span>`;
+        }
+
+        let multiWeekBadgesHtml = '';
+        if (displayWeeks.length > 2) {
+            multiWeekBadgesHtml = `
+                <div class="mt-3 pt-2.5 border-t border-purple-100 flex flex-wrap items-center gap-2">
+                    <span class="text-[10px] font-bold text-gray-500 uppercase">สถิติทุกสัปดาห์ที่เลือก:</span>
+                    ${displayWeeks.map(w => {
+                        const st = statsPerWeek[w];
+                        const ringBadge = st.ring12 > 0 ? `<span class="text-red-600 font-bold ml-1">🔴 ${st.ring12}</span>` : `<span class="text-gray-400 font-semibold ml-1">0</span>`;
+                        return `<span class="text-[11px] bg-white border border-gray-200 px-2 py-0.5 rounded-md shadow-2xs font-medium text-gray-700">
+                            <strong>${st.label}:</strong> ${ringBadge} <span class="text-[10px] text-gray-400">(${st.total} สาย)</span>
+                        </span>`;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        container.innerHTML = `
+            <div class="bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-white rounded-xl border border-purple-200/80 p-4 shadow-2xs mb-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-purple-100">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h3 class="text-sm font-bold text-gray-900">สรุปผลเปรียบเทียบสถิติรายสัปดาห์ (Weekly Comparison Summary)</h3>
+                                <span class="text-[10px] bg-purple-600 text-white font-bold px-2 py-0.5 rounded-full shadow-2xs">${displayWeeks.length} สัปดาห์</span>
+                            </div>
+                            <p class="text-[11px] text-gray-500 mt-0.5">
+                                เปรียบเทียบ: <strong class="text-purple-900 font-semibold">${wFirst.label}</strong> ➔ <strong class="text-purple-900 font-semibold">${wLast.label}</strong>
+                                ${displayWeeks.length > 2 ? `<span class="text-gray-400"> (ทั้งหมด: ${displayWeeks.map(w => statsPerWeek[w].label).join(', ')})</span>` : ''}
+                            </p>
+                        </div>
+                    </div>
+                    <div>
+                        <button id="copyCallSummaryBtn" onclick="copyCallComparisonSummary()" class="text-xs font-semibold bg-white hover:bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-lg transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95">
+                            <svg class="w-3.5 h-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                            <span>คัดลอกข้อความสรุป</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3">
+                    <div class="bg-white/95 rounded-lg p-3 border border-gray-100 shadow-2xs flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-gray-500 uppercase">Ring ≥ 12s (Alert)</span>
+                            <span class="w-2 h-2 rounded-full ${diff12 < 0 ? 'bg-emerald-500' : (diff12 > 0 ? 'bg-red-500' : 'bg-gray-400')}"></span>
+                        </div>
+                        <div class="my-2">
+                            <div class="flex items-baseline gap-1.5">
+                                <span class="text-base font-bold text-gray-500">${wFirst.ring12}</span>
+                                <span class="text-xs text-gray-400">➔</span>
+                                <span class="text-2xl font-black ${diff12 < 0 ? 'text-emerald-600' : (diff12 > 0 ? 'text-red-600' : 'text-gray-700')}">${wLast.ring12}</span>
+                                <span class="text-xs text-gray-500 font-medium">สาย</span>
+                            </div>
+                            <div class="text-[10px] text-gray-400 mt-0.5">${wFirst.ring12Pct.toFixed(1)}% ➔ ${wLast.ring12Pct.toFixed(1)}%</div>
+                        </div>
+                        <div>${statusBadgeHtml}</div>
+                    </div>
+
+                    <div class="bg-white/95 rounded-lg p-3 border border-gray-100 shadow-2xs flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-gray-500 uppercase">สายทั้งหมด (Total Calls)</span>
+                            <span class="text-purple-600 font-bold text-xs">📞</span>
+                        </div>
+                        <div class="my-2">
+                            <div class="flex items-baseline gap-1.5">
+                                <span class="text-sm font-semibold text-gray-500">${wFirst.total.toLocaleString()}</span>
+                                <span class="text-xs text-gray-400">➔</span>
+                                <span class="text-xl font-black text-gray-800">${wLast.total.toLocaleString()}</span>
+                                <span class="text-xs text-gray-500 font-medium">สาย</span>
+                            </div>
+                            <div class="text-[10px] text-gray-400 mt-0.5">ผลต่าง: ${diffCalls >= 0 ? '+' : ''}${diffCalls.toLocaleString()} สาย</div>
+                        </div>
+                        <div class="text-[11px] font-bold ${diffCalls >= 0 ? 'text-blue-700' : 'text-orange-700'}">
+                            ${diffCalls >= 0 ? '🔺 สายเพิ่มขึ้น' : '🔻 สายลดลง'} (${pctChangeCalls}%)
+                        </div>
+                    </div>
+
+                    <div class="bg-white/95 rounded-lg p-3 border border-gray-100 shadow-2xs flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-gray-500 uppercase">% Ring ≥ 12s Ratio</span>
+                            <span class="text-orange-500 font-bold text-xs">📊</span>
+                        </div>
+                        <div class="my-2">
+                            <div class="flex items-baseline gap-1.5">
+                                <span class="text-sm font-semibold text-gray-500">${wFirst.ring12Pct.toFixed(1)}%</span>
+                                <span class="text-xs text-gray-400">➔</span>
+                                <span class="text-xl font-black ${parseFloat(diffRate) <= 0 ? 'text-emerald-600' : 'text-red-600'}">${wLast.ring12Pct.toFixed(1)}%</span>
+                            </div>
+                            <div class="text-[10px] text-gray-400 mt-0.5">ผลต่างอัตราส่วน: ${parseFloat(diffRate) > 0 ? '+' : ''}${diffRate}%</div>
+                        </div>
+                        <div class="text-[11px] font-bold ${parseFloat(diffRate) <= 0 ? 'text-emerald-700' : 'text-red-700'}">
+                            ${parseFloat(diffRate) <= 0 ? '🟢 สัดส่วนสายเกิน 12s ลดลง' : '🔴 สัดส่วนสายเกิน 12s เพิ่มขึ้น'}
+                        </div>
+                    </div>
+
+                    <div class="bg-white/95 rounded-lg p-3 border border-gray-100 shadow-2xs flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-gray-500 uppercase">Avg Ring Time</span>
+                            <span class="text-blue-500 font-bold text-xs">⏱️</span>
+                        </div>
+                        <div class="my-2">
+                            <div class="flex items-baseline gap-1.5">
+                                <span class="text-sm font-semibold text-gray-500">${wFirst.avgRingSec}s</span>
+                                <span class="text-xs text-gray-400">➔</span>
+                                <span class="text-xl font-black text-gray-800">${wLast.avgRingSec}s</span>
+                            </div>
+                            <div class="text-[10px] text-gray-400 mt-0.5">ผลต่าง: ${parseFloat(diffAvgSec) > 0 ? '+' : ''}${diffAvgSec}s</div>
+                        </div>
+                        <div class="text-[11px] font-bold ${parseFloat(diffAvgSec) <= 0 ? 'text-emerald-700' : 'text-orange-700'}">
+                            ${parseFloat(diffAvgSec) <= 0 ? '🟢 รับสายเร็วขึ้น' : '🟠 เวลา Ring สูงขึ้น'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-purple-100/70 mt-3">
+                    <div class="bg-emerald-50/50 rounded-lg p-2.5 border border-emerald-200">
+                        <div class="flex items-center justify-between gap-1 mb-1.5">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs">🟢</span>
+                                <span class="text-[11px] font-bold text-emerald-900">Agents ที่พัฒนาดีขึ้น (สาย 12s ลดลง)</span>
+                            </div>
+                            <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full">${improvedAgents.length}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+                            ${improvedAgents.length > 0 ? improvedAgents.map(a => `
+                                <span class="inline-flex items-center gap-1 text-[11px] bg-white text-gray-800 border border-emerald-200 px-2 py-0.5 rounded shadow-2xs">
+                                    <span class="font-medium text-gray-700">${a.name}</span>
+                                    <span class="text-xs font-black text-emerald-600">${a.delta}</span>
+                                </span>
+                            `).join('') : '<span class="text-[11px] text-gray-400 italic">ไม่มีข้อมูลสายลดลง</span>'}
+                        </div>
+                    </div>
+
+                    <div class="bg-red-50/50 rounded-lg p-2.5 border border-red-200">
+                        <div class="flex items-center justify-between gap-1 mb-1.5">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs">🔴</span>
+                                <span class="text-[11px] font-bold text-red-900">Agents ที่ต้องติดตาม (สาย 12s เพิ่มขึ้น)</span>
+                            </div>
+                            <span class="text-[10px] bg-red-100 text-red-800 font-bold px-1.5 py-0.2 rounded-full">${worsenedAgents.length}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+                            ${worsenedAgents.length > 0 ? worsenedAgents.map(a => `
+                                <span class="inline-flex items-center gap-1 text-[11px] bg-white text-gray-800 border border-red-200 px-2 py-0.5 rounded shadow-2xs">
+                                    <span class="font-medium text-gray-700">${a.name}</span>
+                                    <span class="text-xs font-black text-red-600">+${a.delta}</span>
+                                </span>
+                            `).join('') : '<span class="text-[11px] text-emerald-700 font-medium">✓ ยอดเยี่ยม! ไม่มี Agent ที่มีสายเกิน 12s เพิ่มขึ้น</span>'}
+                        </div>
+                    </div>
+                </div>
+
+                ${multiWeekBadgesHtml}
+            </div>
+        `;
+    } else {
+        // Single week summary
+        const wFirst = statsPerWeek[displayWeeks[0]];
+        const agentsWith12s = Object.entries(wFirst.agentStats).filter(([_, s]) => s.ring12 > 0).sort((a, b) => b[1].ring12 - a[1].ring12);
+
+        let copyText = `📊 สรุปข้อมูลสัปดาห์ ${wFirst.label} (Call Not Received Within 12 Secs)\n`;
+        copyText += `─────────────────────────────────────────\n`;
+        copyText += `• สาย Ring ≥ 12s: ${wFirst.ring12} สาย (${wFirst.ring12Pct.toFixed(1)}%)\n`;
+        copyText += `• สายทั้งหมด: ${wFirst.total.toLocaleString()} สาย\n`;
+        copyText += `• สายปกติ (<12s): ${wFirst.normal.toLocaleString()} สาย\n`;
+        copyText += `• เวลา Ring Time เฉลี่ย: ${wFirst.avgRingSec}s\n`;
+        if (agentsWith12s.length > 0) {
+            copyText += `• Agents ที่พบสาย Ring ≥ 12s: ${agentsWith12s.map(([n, s]) => `${n} (${s.ring12} สาย)`).join(', ')}\n`;
+        } else {
+            copyText += `• Agents ที่พบสาย Ring ≥ 12s: ไม่พบ (0 สาย)\n`;
+        }
+        copyText += `─────────────────────────────────────────`;
+        lastCallComparisonSummaryText = copyText;
+
+        container.innerHTML = `
+            <div class="bg-gradient-to-r from-purple-50/70 to-white rounded-xl border border-purple-200/80 p-4 shadow-2xs mb-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-purple-100">
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">📅</span>
+                        <h3 class="text-sm font-bold text-gray-900">สรุปข้อมูลสัปดาห์: <span class="text-purple-700">${wFirst.label}</span></h3>
+                        <span class="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full">1 สัปดาห์</span>
+                    </div>
+                    <button id="copyCallSummaryBtn" onclick="copyCallComparisonSummary()" class="text-xs font-semibold bg-white hover:bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-lg transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95">
+                        <svg class="w-3.5 h-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                        <span>คัดลอกสรุป</span>
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
+                    <div class="bg-white p-2.5 rounded-lg border border-gray-100 shadow-2xs">
+                        <div class="text-[10px] text-gray-400 font-bold uppercase">Ring ≥ 12s</div>
+                        <div class="text-lg font-black text-red-600 mt-1">${wFirst.ring12} <span class="text-xs text-gray-500 font-medium">สาย (${wFirst.ring12Pct.toFixed(1)}%)</span></div>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-lg border border-gray-100 shadow-2xs">
+                        <div class="text-[10px] text-gray-400 font-bold uppercase">สายทั้งหมด</div>
+                        <div class="text-lg font-black text-gray-800 mt-1">${wFirst.total.toLocaleString()} <span class="text-xs text-gray-500 font-medium">สาย</span></div>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-lg border border-gray-100 shadow-2xs">
+                        <div class="text-[10px] text-gray-400 font-bold uppercase">สายปกติ (<12s)</div>
+                        <div class="text-lg font-black text-emerald-600 mt-1">${wFirst.normal.toLocaleString()} <span class="text-xs text-gray-500 font-medium">สาย</span></div>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-lg border border-gray-100 shadow-2xs">
+                        <div class="text-[10px] text-gray-400 font-bold uppercase">Avg Ring Time</div>
+                        <div class="text-lg font-black text-blue-600 mt-1">${wFirst.avgRingSec}s</div>
+                    </div>
+                </div>
+                <div class="mt-3 p-2 bg-purple-50/60 rounded-lg border border-purple-100 text-[11px] text-purple-800 flex items-center gap-2">
+                    <span>💡</span>
+                    <span><strong>เคล็ดลับ:</strong> คุณสามารถคลิกเลือกสัปดาห์อื่นเพิ่มเติมที่แถบตัวกรองด้านบน เพื่อเปิดการเปรียบเทียบสถิติและแนวโน้มแบบเทียบเคียง (Comparison) ได้ทันที</span>
+                </div>
+            </div>
+        `;
+    }
+}
+
+window.copyCallComparisonSummary = function() {
+    if (!lastCallComparisonSummaryText) return;
+    const handleSuccess = () => {
+        const btn = document.getElementById('copyCallSummaryBtn');
+        if (!btn) return;
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = `<span class="text-emerald-700 font-bold flex items-center gap-1">✓ คัดลอกสำเร็จ!</span>`;
+        btn.classList.add('bg-emerald-50', 'border-emerald-300');
+        setTimeout(() => {
+            btn.innerHTML = oldHtml;
+            btn.classList.remove('bg-emerald-50', 'border-emerald-300');
+        }, 2000);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(lastCallComparisonSummaryText).then(handleSuccess).catch(() => {
+            fallbackCopy(lastCallComparisonSummaryText, handleSuccess);
+        });
+    } else {
+        fallbackCopy(lastCallComparisonSummaryText, handleSuccess);
+    }
+};
+
+function fallbackCopy(text, callback) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        if (callback) callback();
+    } catch(e) {
+        alert('ไม่สามารถคัดลอกได้อัตโนมัติ');
+    }
+    document.body.removeChild(ta);
+}
+
+function renderWeeklyComparisonMatrix(filteredData, displayWeeksParam) {
     const theadRow = document.getElementById('callMatrixTheadRow');
     const tbody = document.getElementById('callMatrixTbody');
     if (!theadRow || !tbody) return;
@@ -2535,11 +2994,11 @@ function renderWeeklyComparisonMatrix(filteredData) {
     const weekMap = new Map();
     getFilteredCallRecords().forEach(d => {
         if (!weekMap.has(d.weekKey)) {
-            weekMap.set(d.weekKey, d.weekLabel);
+            weekMap.set(d.weekKey, d.weekLabel || d.weekKey);
         }
     });
     const allWeeks = Array.from(weekMap.keys()).sort();
-    const displayWeeks = (callFilterWeek !== 'all') ? [callFilterWeek] : allWeeks;
+    const displayWeeks = displayWeeksParam || ((selectedCallWeeks.size > 0) ? Array.from(selectedCallWeeks).sort() : allWeeks);
 
     // Build the Header Row
     let headHtml = `
@@ -2723,7 +3182,7 @@ function renderWeeklyComparisonMatrix(filteredData) {
     tbody.innerHTML = matrixHtml;
 }
 
-function renderWeeklyComparisonChart(filteredData) {
+function renderWeeklyComparisonChart(filteredData, displayWeeksParam) {
     const chartEl = document.getElementById('callWeeklyCompChart');
     if (!chartEl) return;
 
@@ -2735,11 +3194,11 @@ function renderWeeklyComparisonChart(filteredData) {
     const weekMap = new Map();
     getFilteredCallRecords().forEach(d => {
         if (!weekMap.has(d.weekKey)) {
-            weekMap.set(d.weekKey, d.weekLabel);
+            weekMap.set(d.weekKey, d.weekLabel || d.weekKey);
         }
     });
     const allWeeks = Array.from(weekMap.keys()).sort();
-    const displayWeeks = (callFilterWeek !== 'all') ? [callFilterWeek] : allWeeks;
+    const displayWeeks = displayWeeksParam || ((selectedCallWeeks.size > 0) ? Array.from(selectedCallWeeks).sort() : allWeeks);
 
     // Find agents who had Ring 12s in filteredData
     const agentStats = {};
