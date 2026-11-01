@@ -75,6 +75,8 @@ let fcrFilterChannelGroup = 'all'; // 'all', 'voice', 'line', 'other'
 let fcrFilterStatus = 'all';     // 'all', 'fcr', 'non_fcr'
 let fcrViewMode = 'channel';     // 'channel' or 'agent'
 let fcrAgentScope = 'team';      // 'team' (default - เฉพาะ Agent ในทีม) or 'all' (ทุกคน)
+let fcrAgentSortCol = 'base';    // 'agent', 'base', 'fcr', 'nonFcr', 'pct', 'status', 'voice', 'line', 'other'
+let fcrAgentSortDir = 'desc';    // 'desc' or 'asc'
 let selectedFcrAgent = 'all';    // 'all' or agent name (from Opened by)
 let chartInstances = {};
 
@@ -3961,6 +3963,31 @@ window.setFcrAgentScope = function(scope) {
     updateFcrDashboardView();
 };
 
+window.sortFcrAgentTable = function(col) {
+    if (fcrAgentSortCol === col) {
+        fcrAgentSortDir = fcrAgentSortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+        fcrAgentSortCol = col;
+        fcrAgentSortDir = (col === 'agent') ? 'asc' : 'desc';
+    }
+    updateFcrDashboardView();
+};
+
+function updateFcrAgentSortIcons() {
+    const cols = ['agent', 'base', 'fcr', 'nonFcr', 'pct', 'status', 'voice', 'line', 'other'];
+    cols.forEach(col => {
+        const iconEl = document.getElementById(`sortIcon_${col}`);
+        if (!iconEl) return;
+        if (fcrAgentSortCol === col) {
+            iconEl.textContent = fcrAgentSortDir === 'asc' ? '▲' : '▼';
+            iconEl.className = 'text-xs text-teal-700 font-extrabold ml-1 inline-block';
+        } else {
+            iconEl.textContent = '↕';
+            iconEl.className = 'text-xs text-gray-300 font-normal ml-1 inline-block';
+        }
+    });
+}
+
 window.selectFcrAgent = function(agentName) {
     fcrTablePage = 1;
     if (selectedFcrAgent === agentName) {
@@ -4301,8 +4328,55 @@ function renderFcrAgentView(weekFiltered) {
         return st;
     });
 
-    // Sort: highest base desc, then highest %FCR desc
-    agentList.sort((a, b) => b.base - a.base || b.pctExact - a.pctExact);
+    // Sort agentList based on fcrAgentSortCol and fcrAgentSortDir
+    agentList.sort((a, b) => {
+        let valA, valB;
+        switch (fcrAgentSortCol) {
+            case 'agent':
+                return fcrAgentSortDir === 'asc'
+                    ? a.agent.localeCompare(b.agent, 'th')
+                    : b.agent.localeCompare(a.agent, 'th');
+            case 'base':
+                valA = a.base; valB = b.base; break;
+            case 'fcr':
+                valA = a.fcr; valB = b.fcr; break;
+            case 'nonFcr':
+                valA = a.nonFcr; valB = b.nonFcr; break;
+            case 'pct':
+                valA = a.pctExact; valB = b.pctExact; break;
+            case 'status':
+                valA = a.isPass ? 1 : 0; valB = b.isPass ? 1 : 0; break;
+            case 'voice':
+                if (a.voiceBase !== b.voiceBase) {
+                    valA = a.voiceBase; valB = b.voiceBase;
+                } else {
+                    valA = a.voiceFcr; valB = b.voiceFcr;
+                }
+                break;
+            case 'line':
+                if (a.lineBase !== b.lineBase) {
+                    valA = a.lineBase; valB = b.lineBase;
+                } else {
+                    valA = a.lineFcr; valB = b.lineFcr;
+                }
+                break;
+            case 'other':
+                if (a.otherBase !== b.otherBase) {
+                    valA = a.otherBase; valB = b.otherBase;
+                } else {
+                    valA = a.otherFcr; valB = b.otherFcr;
+                }
+                break;
+            default:
+                valA = a.base; valB = b.base;
+        }
+        if (valA === valB) {
+            return b.base - a.base || a.agent.localeCompare(b.agent, 'th');
+        }
+        return fcrAgentSortDir === 'asc' ? valA - valB : valB - valA;
+    });
+
+    updateFcrAgentSortIcons();
 
     const totalAgents = agentList.length;
     const passAgents = agentList.filter(a => a.isPass).length;
