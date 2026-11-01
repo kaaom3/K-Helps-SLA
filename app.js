@@ -636,6 +636,7 @@ function switchModuleTab(moduleName) {
     const tabCall = document.getElementById('tabBtnCallReport');
     const tabAbandoned = document.getElementById('tabBtnAbandoned');
     const tabFcr = document.getElementById('tabBtnFcr');
+    const tabFcrAgent = document.getElementById('tabBtnFcrAgent');
     const viewChat = document.getElementById('chatSlaModuleView');
     const viewTask = document.getElementById('taskSlaModuleView');
     const viewCall = document.getElementById('callReportModuleView');
@@ -643,7 +644,7 @@ function switchModuleTab(moduleName) {
     const viewFcr = document.getElementById('fcrModuleView');
     const clearBtnText = document.getElementById('clearDbBtnText');
 
-    [tabChat, tabTask, tabCall, tabAbandoned, tabFcr].forEach(t => t?.classList.remove('active'));
+    [tabChat, tabTask, tabCall, tabAbandoned, tabFcr, tabFcrAgent].forEach(t => t?.classList.remove('active'));
     [viewChat, viewTask, viewCall, viewAbandoned, viewFcr].forEach(v => v?.classList.add('hidden'));
 
     if (moduleName === 'chatSla') {
@@ -675,7 +676,13 @@ function switchModuleTab(moduleName) {
         viewFcr?.classList.remove('hidden');
         if (clearBtnText) clearBtnText.textContent = 'Clear FCR DB';
         setupFcrWeekFilters();
-        updateFcrDashboardView();
+        setFcrViewMode('channel');
+    } else if (moduleName === 'fcrAgent') {
+        tabFcrAgent?.classList.add('active');
+        viewFcr?.classList.remove('hidden');
+        if (clearBtnText) clearBtnText.textContent = 'Clear FCR DB';
+        setupFcrWeekFilters();
+        setFcrViewMode('agent');
     }
 }
 
@@ -685,6 +692,7 @@ function updateNavBadges() {
     const callBadge = document.getElementById('navBadgeCall');
     const abBadge = document.getElementById('navBadgeAbandoned');
     const fcrBadge = document.getElementById('navBadgeFcr');
+    const fcrAgentBadge = document.getElementById('navBadgeFcrAgent');
     if (chatBadge) {
         chatBadge.textContent = processedData.length;
         chatBadge.classList.toggle('hidden', processedData.length === 0);
@@ -705,6 +713,11 @@ function updateNavBadges() {
     if (fcrBadge) {
         fcrBadge.textContent = processedFcrData.length;
         fcrBadge.classList.toggle('hidden', processedFcrData.length === 0);
+    }
+    if (fcrAgentBadge) {
+        const uniqueAgents = new Set(processedFcrData.map(d => d.openedBy || d.assignee).filter(Boolean));
+        fcrAgentBadge.textContent = uniqueAgents.size;
+        fcrAgentBadge.classList.toggle('hidden', uniqueAgents.size === 0);
     }
     const dropChatBadge = document.getElementById('clearChatCountBadge');
     const dropTaskBadge = document.getElementById('clearTaskCountBadge');
@@ -3824,6 +3837,8 @@ window.setFcrViewMode = function(mode) {
     fcrViewMode = mode;
     const btnChannel = document.getElementById('fcrViewBtnChannel');
     const btnAgent = document.getElementById('fcrViewBtnAgent');
+    const tabFcr = document.getElementById('tabBtnFcr');
+    const tabFcrAgent = document.getElementById('tabBtnFcrAgent');
     const viewChannel = document.getElementById('fcrChannelViewContainer');
     const viewAgent = document.getElementById('fcrAgentViewContainer');
 
@@ -3837,10 +3852,16 @@ window.setFcrViewMode = function(mode) {
         btnAgent?.classList.add('bg-white', 'text-teal-800', 'shadow-xs', 'font-bold');
         btnAgent?.classList.remove('text-gray-600', 'font-medium');
         viewAgent?.classList.remove('hidden');
+        tabFcr?.classList.remove('active');
+        tabFcrAgent?.classList.add('active');
+        currentActiveModule = 'fcrAgent';
     } else {
         btnChannel?.classList.add('bg-white', 'text-teal-800', 'shadow-xs', 'font-bold');
         btnChannel?.classList.remove('text-gray-600', 'font-medium');
         viewChannel?.classList.remove('hidden');
+        tabFcr?.classList.add('active');
+        tabFcrAgent?.classList.remove('active');
+        currentActiveModule = 'fcr';
     }
     updateFcrDashboardView();
 };
