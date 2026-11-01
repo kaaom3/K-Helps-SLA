@@ -3864,6 +3864,15 @@ window.setFcrViewMode = function(mode) {
         currentActiveModule = 'fcr';
     }
     updateFcrDashboardView();
+    setTimeout(() => {
+        try {
+            if (mode === 'agent' && chartInstances['fcrAgentChart']) {
+                chartInstances['fcrAgentChart'].windowResize();
+            } else if (mode === 'channel' && chartInstances['fcrChannelGroup']) {
+                chartInstances['fcrChannelGroup'].windowResize();
+            }
+        } catch (e) {}
+    }, 60);
 };
 
 window.selectFcrAgent = function(agentName) {
@@ -4303,68 +4312,72 @@ function renderFcrAgentChart(agentList) {
         return;
     }
 
-    chartEl.innerHTML = '';
-    // Show up to 25 top agents by base
-    const displayList = agentList.slice(0, 25);
-    const categories = displayList.map(a => a.agent);
-    const seriesData = displayList.map(a => a.pctRound);
-    const colors = displayList.map(a => a.isPass ? '#10b981' : '#f87171');
+    try {
+        chartEl.innerHTML = '';
+        // Show up to 25 top agents by base
+        const displayList = agentList.slice(0, 25);
+        const categories = displayList.map(a => a.agent);
+        const seriesData = displayList.map(a => a.pctRound);
+        const colors = displayList.map(a => a.isPass ? '#10b981' : '#f87171');
 
-    chartInstances['fcrAgentChart'] = new ApexCharts(chartEl, {
-        chart: {
-            type: 'bar',
-            height: 260,
-            toolbar: { show: false },
-            fontFamily: 'Inter, sans-serif'
-        },
-        plotOptions: {
-            bar: {
-                horizontal: false,
-                columnWidth: '45%',
-                borderRadius: 4,
-                distributed: true,
-                dataLabels: { position: 'top' }
-            }
-        },
-        dataLabels: {
-            enabled: true,
-            formatter: val => `${val}%`,
-            offsetY: -16,
-            style: { fontSize: '10px', fontWeight: 800, colors: ['#1e293b'] }
-        },
-        colors: colors,
-        series: [{ name: '%FCR', data: seriesData }],
-        xaxis: {
-            categories: categories,
-            labels: {
-                rotate: -25,
-                rotateAlways: categories.length > 3,
-                style: { fontSize: '10px', fontWeight: 600 }
-            }
-        },
-        yaxis: {
-            min: 0,
-            max: 105,
-            tickAmount: 4,
-            labels: { formatter: v => `${Math.round(v)}%`, style: { fontSize: '10px' } },
-            title: { text: '%FCR', style: { fontSize: '11px', fontWeight: 600 } }
-        },
-        annotations: {
-            yaxis: [{
-                y: 90,
-                borderColor: '#ef4444',
-                strokeDashArray: 4,
-                label: {
-                    borderColor: '#ef4444',
-                    style: { color: '#fff', background: '#ef4444', fontSize: '9px', fontWeight: 700 },
-                    text: 'Target > 90%'
+        chartInstances['fcrAgentChart'] = new ApexCharts(chartEl, {
+            chart: {
+                type: 'bar',
+                height: 260,
+                toolbar: { show: false },
+                fontFamily: 'Inter, sans-serif'
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: false,
+                    columnWidth: '45%',
+                    borderRadius: 4,
+                    distributed: true,
+                    dataLabels: { position: 'top' }
                 }
-            }]
-        },
-        legend: { show: false },
-        grid: { borderColor: '#f1f5f9', strokeDashArray: 3 }
-    });
-    chartInstances['fcrAgentChart'].render();
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: val => `${val}%`,
+                offsetY: -16,
+                style: { fontSize: '10px', fontWeight: 800, colors: ['#1e293b'] }
+            },
+            colors: colors,
+            series: [{ name: '%FCR', data: seriesData }],
+            xaxis: {
+                categories: categories,
+                labels: {
+                    rotate: -25,
+                    rotateAlways: categories.length > 3,
+                    style: { fontSize: '10px', fontWeight: 600 }
+                }
+            },
+            yaxis: {
+                min: 0,
+                max: 105,
+                tickAmount: 4,
+                labels: { formatter: v => `${Math.round(v)}%`, style: { fontSize: '10px' } },
+                title: { text: '%FCR', style: { fontSize: '11px', fontWeight: 600 } }
+            },
+            annotations: {
+                yaxis: [{
+                    y: 90,
+                    borderColor: '#ef4444',
+                    strokeDashArray: 4,
+                    label: {
+                        borderColor: '#ef4444',
+                        style: { color: '#fff', background: '#ef4444', fontSize: '9px', fontWeight: 700 },
+                        text: 'Target > 90%'
+                    }
+                }]
+            },
+            legend: { show: false },
+            grid: { borderColor: '#f1f5f9', strokeDashArray: 3 }
+        });
+        chartInstances['fcrAgentChart'].render();
+    } catch (err) {
+        console.error('ApexCharts agent render error:', err);
+    }
 }
 
 function renderFcrChannelGroupChart(allPct, voicePct, linePct, otherPct) {
