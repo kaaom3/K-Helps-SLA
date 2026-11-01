@@ -1201,20 +1201,33 @@
                         </div>
                     </div>
 
-                    <!-- Row 2: FCR Status Pills + Search + Export -->
+                    <!-- Row 2: View Switch + FCR Status Pills + Search + Export -->
                     <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-2.5">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase">FCR Filter:</span>
-                            <div class="flex items-center gap-1" id="fcrStatusPills">
-                                <button class="quick-filter-btn active" data-fcrstatus="all" onclick="setFcrStatusFilter('all')">All (ทั้งหมด)</button>
-                                <button class="quick-filter-btn" data-fcrstatus="fcr" onclick="setFcrStatusFilter('fcr')">FCR (ตัวตั้ง)</button>
-                                <button class="quick-filter-btn" data-fcrstatus="non_fcr" onclick="setFcrStatusFilter('non_fcr')">Non-FCR (ส่วนต่าง)</button>
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <!-- Toggle Sub-tab: By Channel vs By Agent -->
+                            <div class="flex items-center bg-gray-100 p-0.5 rounded-lg gap-1 text-xs">
+                                <button id="fcrViewBtnChannel" onclick="setFcrViewMode('channel')" class="px-3.5 py-1.5 rounded-md font-semibold transition-all shadow-2xs bg-white text-teal-800 flex items-center gap-1.5 cursor-pointer">
+                                    <span>📊 ภาพรวมตาม Channel</span>
+                                </button>
+                                <button id="fcrViewBtnAgent" onclick="setFcrViewMode('agent')" class="px-3.5 py-1.5 rounded-md font-medium transition-all text-gray-600 hover:text-gray-900 flex items-center gap-1.5 cursor-pointer">
+                                    <span>👤 สรุปตาม Agent (By Agent)</span>
+                                    <span id="fcrAgentCountPill" class="text-[9px] bg-teal-100 text-teal-800 font-bold px-1.5 py-0.2 rounded-full">0</span>
+                                </button>
+                            </div>
+
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[10px] font-bold text-gray-400 uppercase">FCR Filter:</span>
+                                <div class="flex items-center gap-1" id="fcrStatusPills">
+                                    <button class="quick-filter-btn active" data-fcrstatus="all" onclick="setFcrStatusFilter('all')">All (ทั้งหมด)</button>
+                                    <button class="quick-filter-btn" data-fcrstatus="fcr" onclick="setFcrStatusFilter('fcr')">FCR (ตัวตั้ง)</button>
+                                    <button class="quick-filter-btn" data-fcrstatus="non_fcr" onclick="setFcrStatusFilter('non_fcr')">Non-FCR (ส่วนต่าง)</button>
+                                </div>
                             </div>
                         </div>
 
                         <div class="flex items-center gap-2">
                             <div class="relative">
-                                <input type="text" id="fcrSearchInput" placeholder="ค้นหา INC, Channel, Assignee, App..." class="text-xs pl-7 pr-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-teal-500 w-60 bg-gray-50/50">
+                                <input type="text" id="fcrSearchInput" placeholder="ค้นหา INC, Channel, Opened by, Assignee..." class="text-xs pl-7 pr-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-teal-500 w-64 bg-gray-50/50">
                                 <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                             </div>
                             <button id="exportFcrCsvBtn" onclick="exportFcrToCSV()" class="bg-gray-800 hover:bg-gray-900 text-white text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
@@ -1225,7 +1238,8 @@
                     </div>
                 </div>
 
-                <!-- 5 KPI CARDS (%FCR Target > 90%) -->
+                <!-- SUB-TAB 1: CHANNEL VIEW CONTAINER -->
+                <div id="fcrChannelViewContainer" class="flex flex-col gap-5">
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-5">
                     <!-- Card 1: %FCR All Channel -->
                     <div class="kpi-card group bg-white rounded-xl shadow-xs border-2 border-teal-200 p-4 cursor-default">
@@ -1389,14 +1403,131 @@
                     </div>
 
                 </div>
+                <!-- END SUB-TAB 1: CHANNEL VIEW CONTAINER -->
+
+                <!-- SUB-TAB 2: AGENT VIEW CONTAINER (Grouped by Opened by) -->
+                <div id="fcrAgentViewContainer" class="hidden flex flex-col gap-5">
+                    
+                    <!-- 4 Agent KPI Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Total Agents -->
+                        <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total Agents (Opened by)</p>
+                                    <p class="text-2xl font-bold text-gray-800 mt-1 kpi-number" id="fcrAgentTotalCard">0</p>
+                                    <p class="text-[11px] text-gray-500 mt-0.5">มีเคสในระบบทั้งหมด</p>
+                                </div>
+                                <div class="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <svg class="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Target Pass (>90%) -->
+                        <div class="kpi-card group bg-white rounded-xl shadow-xs border border-emerald-200 p-4 cursor-default bg-emerald-50/20">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">ผ่านเกณฑ์ (%FCR &gt; 90%)</p>
+                                    <p class="text-2xl font-black text-emerald-600 mt-1 kpi-number" id="fcrAgentPassCard">0</p>
+                                    <p class="text-[11px] text-emerald-700 mt-0.5 font-medium">✅ ผ่านเป้าหมาย FCR</p>
+                                </div>
+                                <div class="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Below Target (<=90%) -->
+                        <div class="kpi-card group bg-white rounded-xl shadow-xs border border-amber-200 p-4 cursor-default bg-amber-50/20">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-[10px] font-bold text-amber-700 uppercase tracking-wider">ต่ำกว่าเกณฑ์ (≤ 90%)</p>
+                                    <p class="text-2xl font-black text-amber-600 mt-1 kpi-number" id="fcrAgentBelowCard">0</p>
+                                    <p class="text-[11px] text-amber-700 mt-0.5 font-medium">⚠️ ต้องติดตามผลงาน</p>
+                                </div>
+                                <div class="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Avg Agent %FCR -->
+                        <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Avg Agent %FCR</p>
+                                    <p class="text-2xl font-bold text-teal-800 mt-1 kpi-number" id="fcrAgentAvgPctCard">0%</p>
+                                    <p class="text-[11px] text-gray-500 mt-0.5">ค่าเฉลี่ย %FCR รายบุคคล</p>
+                                </div>
+                                <div class="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <svg class="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Comparison Chart -->
+                    <div class="bg-white rounded-xl shadow-xs border border-gray-100 p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                            <div>
+                                <h3 class="text-sm font-bold text-gray-800">กราฟเปรียบเทียบ %FCR แต่ละ Agent (Target &gt; 90%)</h3>
+                                <p class="text-[11px] text-gray-500">ดึงข้อมูลและจัดกลุ่มตามชื่อผู้เปิดเคส (Opened by)</p>
+                            </div>
+                            <span class="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded">🔴 เส้นประ = Target 90%</span>
+                        </div>
+                        <div id="fcrAgentComparisonChart" class="w-full" style="height:260px;min-height:260px;"></div>
+                    </div>
+
+                    <!-- Agent Pivot Table -->
+                    <div class="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
+                        <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2.5 h-2.5 rounded-full bg-teal-600"></div>
+                                <h3 class="text-sm font-bold text-gray-800">ตารางสรุป %FCR ราย Agent (Grouped by Opened by)</h3>
+                                <span id="fcrAgentTableCountBadge" class="text-[10px] bg-teal-50 text-teal-800 font-bold px-2 py-0.5 rounded-full border border-teal-200">0 คน</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[11px] text-gray-400">💡 คลิกที่ปุ่ม "ดูเคส" เพื่อกรองตารางเคส Incident ด้านล่าง</span>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <table class="w-full text-xs whitespace-nowrap">
+                                <thead class="bg-gray-50 border-b border-gray-100 text-gray-600">
+                                    <tr>
+                                        <th class="text-center px-3 py-2.5 text-[10px] font-semibold uppercase">#</th>
+                                        <th class="text-left px-4 py-2.5 text-[10px] font-semibold uppercase text-teal-900">Agent Name (Opened by)</th>
+                                        <th class="text-right px-4 py-2.5 text-[10px] font-semibold uppercase">เคสทั้งหมด (Base)</th>
+                                        <th class="text-right px-4 py-2.5 text-[10px] font-semibold uppercase text-teal-700 bg-teal-50/50">เคส FCR</th>
+                                        <th class="text-right px-4 py-2.5 text-[10px] font-semibold uppercase text-gray-500">Non-FCR</th>
+                                        <th class="text-right px-4 py-2.5 text-[10px] font-semibold uppercase">%FCR</th>
+                                        <th class="text-center px-4 py-2.5 text-[10px] font-semibold uppercase">สถานะ</th>
+                                        <th class="text-center px-3 py-2.5 text-[10px] font-semibold uppercase text-indigo-700">Voice (Phone)</th>
+                                        <th class="text-center px-3 py-2.5 text-[10px] font-semibold uppercase text-emerald-700">Non Voice (LINE)</th>
+                                        <th class="text-center px-3 py-2.5 text-[10px] font-semibold uppercase text-amber-700">Email + Other</th>
+                                        <th class="text-center px-3 py-2.5 text-[10px] font-semibold uppercase">ดูเคส</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fcrAgentPivotBody" class="divide-y divide-gray-100"></tbody>
+                                <tfoot id="fcrAgentPivotFoot" class="bg-teal-50/80 font-extrabold border-t-2 border-teal-500 text-gray-900"></tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+                <!-- END SUB-TAB 2: AGENT VIEW CONTAINER -->
 
                 <!-- FCR INCIDENT DETAILS TABLE (Paginated 50/page) -->
                 <div class="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
                     <div class="px-5 py-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-wrap">
                             <div class="w-2.5 h-2.5 rounded-full bg-teal-500"></div>
                             <h3 class="text-sm font-bold text-gray-800">รายการเคส Incident</h3>
                             <span id="fcrTableCountBadge" class="text-[11px] bg-teal-50 text-teal-700 font-bold px-2.5 py-0.5 rounded-full border border-teal-200">0 รายการ</span>
+                            <span id="fcrActiveAgentFilterBadge" class="hidden text-[11px] bg-teal-100 text-teal-900 font-bold px-2.5 py-0.5 rounded-full border border-teal-300 flex items-center gap-1.5">
+                                <span>👤 กรองเฉพาะ: <strong id="fcrActiveAgentFilterName"></strong></span>
+                                <button onclick="clearFcrAgentFilter()" class="hover:text-red-600 font-black cursor-pointer ml-1" title="ล้างการกรอง Agent">✕</button>
+                            </span>
                         </div>
                         <!-- Pagination Bar -->
                         <div id="fcrTablePaginationBar" class="flex items-center gap-3 text-xs">
@@ -1419,6 +1550,7 @@
                                     <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">State</th>
                                     <th class="text-center px-4 py-2.5 text-[10px] font-semibold text-teal-700 uppercase bg-teal-50/50">สถานะ FCR</th>
                                     <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">App Acronym</th>
+                                    <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-teal-800 uppercase bg-teal-50/70 border-x border-teal-200">Opened by</th>
                                     <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Assignee</th>
                                     <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Short Description</th>
                                     <th class="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-500 uppercase">Remarks</th>

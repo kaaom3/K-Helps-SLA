@@ -29,6 +29,8 @@ let abandonedFilterWeek = 'all'; // 'all' or weekKey (for Abandoned Khelps_Exper
 let fcrFilterWeek = 'all';       // 'all' or weekKey
 let fcrFilterChannelGroup = 'all'; // 'all', 'voice', 'line', 'other'
 let fcrFilterStatus = 'all';     // 'all', 'fcr', 'non_fcr'
+let fcrViewMode = 'channel';     // 'channel' or 'agent'
+let selectedFcrAgent = 'all';    // 'all' or agent name (from Opened by)
 let chartInstances = {};
 
 // Call & FCR Table Pagination State (for fast UI rendering)
@@ -391,6 +393,7 @@ async function loadDataFromDB() {
             d.weekKey = wInfo.weekKey;
             d.weekLabel = wInfo.weekLabel;
         }
+        d.openedBy = d.openedBy || d.assignee || 'Unknown';
         d.isLeftBase = checkFcrLeftBase(d);
         d.isRightFcr = checkFcrRightTarget(d);
         return d;
@@ -3730,6 +3733,7 @@ function parseFcrRows(rawData) {
         const channel = String(r['Channel'] || '').trim() || '(blank)';
         const assignmentGroup = String(r['Assignment group'] || '').trim();
         const assignee = String(r['Assignee'] || '').trim();
+        const openedBy = String(r['Opened by'] || r['Opened By'] || r['opened_by'] || r['openedBy'] || '').trim();
         const category = String(r['Category'] || '').trim();
         const subcategory = String(r['Subcategory'] || '').trim();
         const service = String(r['Service'] || '').trim();
@@ -3762,6 +3766,7 @@ function parseFcrRows(rawData) {
             weekLabel,
             assignmentGroup,
             assignee,
+            openedBy: openedBy || assignee || 'Unknown',
             category,
             subcategory,
             service,
@@ -3811,6 +3816,48 @@ window.setFcrWeekFilter = function(weekKey) {
     fcrTablePage = 1;
     fcrFilterWeek = weekKey;
     setupFcrWeekFilters();
+    updateFcrDashboardView();
+};
+
+window.setFcrViewMode = function(mode) {
+    fcrTablePage = 1;
+    fcrViewMode = mode;
+    const btnChannel = document.getElementById('fcrViewBtnChannel');
+    const btnAgent = document.getElementById('fcrViewBtnAgent');
+    const viewChannel = document.getElementById('fcrChannelViewContainer');
+    const viewAgent = document.getElementById('fcrAgentViewContainer');
+
+    [btnChannel, btnAgent].forEach(b => {
+        b?.classList.remove('bg-white', 'text-teal-800', 'shadow-2xs', 'font-semibold');
+        b?.classList.add('text-gray-600', 'font-medium');
+    });
+    [viewChannel, viewAgent].forEach(v => v?.classList.add('hidden'));
+
+    if (mode === 'agent') {
+        btnAgent?.classList.add('bg-white', 'text-teal-800', 'shadow-2xs', 'font-semibold');
+        btnAgent?.classList.remove('text-gray-600', 'font-medium');
+        viewAgent?.classList.remove('hidden');
+    } else {
+        btnChannel?.classList.add('bg-white', 'text-teal-800', 'shadow-2xs', 'font-semibold');
+        btnChannel?.classList.remove('text-gray-600', 'font-medium');
+        viewChannel?.classList.remove('hidden');
+    }
+    updateFcrDashboardView();
+};
+
+window.selectFcrAgent = function(agentName) {
+    fcrTablePage = 1;
+    if (selectedFcrAgent === agentName) {
+        selectedFcrAgent = 'all';
+    } else {
+        selectedFcrAgent = agentName;
+    }
+    updateFcrDashboardView();
+};
+
+window.clearFcrAgentFilter = function() {
+    fcrTablePage = 1;
+    selectedFcrAgent = 'all';
     updateFcrDashboardView();
 };
 
@@ -4023,8 +4070,9 @@ function updateFcrDashboardView() {
     }
 
     renderFcrChannelGroupChart(allPctRound, voicePctRound, linePctRound, otherPctRound);
+    renderFcrAgentView(weekFiltered);
 
-    // 6. Filter Details Table by Channel Group, FCR Status, and Search Query
+    // 6. Filter Details Table by Channel Group, FCR Status, Selected Agent, and Search Query
     let tableList = weekFiltered;
 
     if (fcrFilterChannelGroup !== 'all') {
@@ -4037,6 +4085,21 @@ function updateFcrDashboardView() {
         tableList = tableList.filter(d => !d.isRightFcr);
     }
 
+    if (selectedFcrAgent !== 'all') {
+        tableList = tableList.filter(d => (d.openedBy || d.assignee) === selectedFcrAgent);
+    }
+
+    const activeBadge = document.getElementById('fcrActiveAgentFilterBadge');
+    const activeName = document.getElementById('fcrActiveAgentFilterName');
+    if (activeBadge && activeName) {
+        if (selectedFcrAgent !== 'all') {
+            activeName.textContent = selectedFcrAgent;
+            activeBadge.classList.remove('hidden');
+        } else {
+            activeBadge.classList.add('hidden');
+        }
+    }
+
     const q = (document.getElementById('fcrSearchInput')?.value || '').trim().toLowerCase();
     if (q) {
         tableList = tableList.filter(d =>
@@ -4046,12 +4109,241 @@ function updateFcrDashboardView() {
             d.category.toLowerCase().includes(q) ||
             d.state.toLowerCase().includes(q) ||
             d.assignee.toLowerCase().includes(q) ||
+            (d.openedBy && d.openedBy.toLowerCase().includes(q)) ||
             d.applicationAcronym.toLowerCase().includes(q) ||
             d.shortDescription.toLowerCase().includes(q)
         );
     }
 
     renderFcrTable(tableList);
+}
+
+function renderFcrAgentView(weekFiltered) {
+    const agentMap = new Map();
+    weekFiltered.forEach(d => {
+        const ag = d.openedBy || d.assignee || 'Unknown';
+        if (!agentMap.has(ag)) {
+            agentMap.set(ag, {
+                agent: ag,
+                base: 0,
+                fcr: 0,
+                voiceBase: 0,
+                voiceFcr: 0,
+                lineBase: 0,
+                lineFcr: 0,
+                otherBase: 0,
+                otherFcr: 0
+            });
+        }
+        const st = agentMap.get(ag);
+        st.base++;
+        if (d.isRightFcr) st.fcr++;
+
+        const grp = getFcrChannelGroup(d.channel);
+        if (grp === 'voice') {
+            st.voiceBase++;
+            if (d.isRightFcr) st.voiceFcr++;
+        } else if (grp === 'line') {
+            st.lineBase++;
+            if (d.isRightFcr) st.lineFcr++;
+        } else {
+            st.otherBase++;
+            if (d.isRightFcr) st.otherFcr++;
+        }
+    });
+
+    const agentList = Array.from(agentMap.values()).map(st => {
+        st.pctExact = st.base > 0 ? (st.fcr / st.base) * 100 : 0;
+        st.pctRound = Math.round(st.pctExact);
+        st.nonFcr = st.base - st.fcr;
+        st.isPass = st.pctExact > 90;
+        return st;
+    });
+
+    // Sort: highest base desc, then highest %FCR desc
+    agentList.sort((a, b) => b.base - a.base || b.pctExact - a.pctExact);
+
+    const totalAgents = agentList.length;
+    const passAgents = agentList.filter(a => a.isPass).length;
+    const belowAgents = totalAgents - passAgents;
+    const avgPct = totalAgents > 0 ? Math.round(agentList.reduce((s, a) => s + a.pctExact, 0) / totalAgents) : 0;
+
+    // Update Badges & Cards
+    const countPill = document.getElementById('fcrAgentCountPill');
+    if (countPill) countPill.textContent = totalAgents;
+
+    const tableBadge = document.getElementById('fcrAgentTableCountBadge');
+    if (tableBadge) tableBadge.textContent = `${totalAgents.toLocaleString()} คน`;
+
+    animateNumber('fcrAgentTotalCard', totalAgents);
+    animateNumber('fcrAgentPassCard', passAgents);
+    animateNumber('fcrAgentBelowCard', belowAgents);
+    const avgCard = document.getElementById('fcrAgentAvgPctCard');
+    if (avgCard) avgCard.textContent = `${avgPct}%`;
+
+    // Render Table Body
+    const tbody = document.getElementById('fcrAgentPivotBody');
+    const tfoot = document.getElementById('fcrAgentPivotFoot');
+
+    if (tbody && tfoot) {
+        if (agentList.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" class="p-8 text-center text-xs text-gray-400">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td></tr>`;
+            tfoot.innerHTML = `<tr><td colspan="2" class="px-4 py-2.5">Grand Total</td><td class="px-4 py-2.5 text-right font-mono">0</td><td class="px-4 py-2.5 text-right font-mono">0</td><td class="px-4 py-2.5 text-right font-mono">0</td><td class="px-4 py-2.5 text-right font-mono">0%</td><td colspan="5"></td></tr>`;
+        } else {
+            let totalBaseSum = 0;
+            let totalFcrSum = 0;
+            let totalNonFcrSum = 0;
+            let totalVoiceBase = 0, totalVoiceFcr = 0;
+            let totalLineBase = 0, totalLineFcr = 0;
+            let totalOtherBase = 0, totalOtherFcr = 0;
+
+            let html = '';
+            agentList.forEach((item, idx) => {
+                totalBaseSum += item.base;
+                totalFcrSum += item.fcr;
+                totalNonFcrSum += item.nonFcr;
+                totalVoiceBase += item.voiceBase;
+                totalVoiceFcr += item.voiceFcr;
+                totalLineBase += item.lineBase;
+                totalLineFcr += item.lineFcr;
+                totalOtherBase += item.otherBase;
+                totalOtherFcr += item.otherFcr;
+
+                const isSelected = selectedFcrAgent === item.agent;
+                const rowClass = isSelected
+                    ? 'bg-teal-100/70 border-l-4 border-teal-600 font-bold'
+                    : (item.isPass ? 'hover:bg-emerald-50/20' : 'bg-red-50/15 hover:bg-red-50/30');
+
+                const statusBadge = item.isPass
+                    ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ PASS</span>`
+                    : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">⚠️ BELOW</span>`;
+
+                const btnHtml = isSelected
+                    ? `<button onclick="selectFcrAgent('${item.agent.replace(/'/g, "\\'")}')" class="text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded border border-red-200 cursor-pointer">✕ ยกเลิก</button>`
+                    : `<button onclick="selectFcrAgent('${item.agent.replace(/'/g, "\\'")}')" class="text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded border border-teal-200 cursor-pointer">🔍 ดูเคส</button>`;
+
+                html += `
+                    <tr class="${rowClass} transition-colors">
+                        <td class="px-3 py-2 text-center text-gray-400 font-bold text-[11px]">${idx + 1}</td>
+                        <td class="px-4 py-2 font-bold text-gray-900 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full ${item.isPass ? 'bg-emerald-500' : 'bg-red-500'} shrink-0"></span>
+                            <span class="truncate max-w-[200px]" title="${item.agent}">${item.agent}</span>
+                        </td>
+                        <td class="px-4 py-2 text-right font-mono font-semibold text-gray-800">${item.base.toLocaleString()}</td>
+                        <td class="px-4 py-2 text-right font-mono font-bold text-teal-700 bg-teal-50/30">${item.fcr.toLocaleString()}</td>
+                        <td class="px-4 py-2 text-right font-mono text-gray-500">${item.nonFcr.toLocaleString()}</td>
+                        <td class="px-4 py-2 text-right font-mono font-black ${item.isPass ? 'text-emerald-700' : 'text-red-600'}">
+                            ${item.pctRound}% <span class="text-[10px] font-normal text-gray-400">(${item.pctExact.toFixed(1)}%)</span>
+                        </td>
+                        <td class="px-4 py-2 text-center">${statusBadge}</td>
+                        <td class="px-3 py-2 text-center font-mono text-[11px] text-gray-600">${item.voiceFcr}/${item.voiceBase}</td>
+                        <td class="px-3 py-2 text-center font-mono text-[11px] text-gray-600">${item.lineFcr}/${item.lineBase}</td>
+                        <td class="px-3 py-2 text-center font-mono text-[11px] text-gray-600">${item.otherFcr}/${item.otherBase}</td>
+                        <td class="px-3 py-2 text-center">${btnHtml}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+
+            const totalPct = totalBaseSum > 0 ? Math.round((totalFcrSum / totalBaseSum) * 100) : 0;
+            const totalPctExact = totalBaseSum > 0 ? ((totalFcrSum / totalBaseSum) * 100).toFixed(1) : '0.0';
+
+            tfoot.innerHTML = `
+                <tr>
+                    <td colspan="2" class="px-4 py-2.5 font-black uppercase">Grand Total (รวมทั้งหมด)</td>
+                    <td class="px-4 py-2.5 text-right font-mono text-sm font-black text-gray-900">${totalBaseSum.toLocaleString()}</td>
+                    <td class="px-4 py-2.5 text-right font-mono text-sm font-black text-teal-800 bg-teal-100/50">${totalFcrSum.toLocaleString()}</td>
+                    <td class="px-4 py-2.5 text-right font-mono text-sm font-semibold text-gray-600">${totalNonFcrSum.toLocaleString()}</td>
+                    <td class="px-4 py-2.5 text-right font-mono text-sm font-black ${totalPct > 90 ? 'text-teal-900' : 'text-red-700'}">${totalPct}% <span class="text-[10px] font-normal text-gray-500">(${totalPctExact}%)</span></td>
+                    <td class="px-4 py-2.5 text-center">${totalPct > 90 ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500 text-white">PASS</span>' : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500 text-white">BELOW</span>'}</td>
+                    <td class="px-3 py-2.5 text-center font-mono text-xs font-bold">${totalVoiceFcr}/${totalVoiceBase}</td>
+                    <td class="px-3 py-2.5 text-center font-mono text-xs font-bold">${totalLineFcr}/${totalLineBase}</td>
+                    <td class="px-3 py-2.5 text-center font-mono text-xs font-bold">${totalOtherFcr}/${totalOtherBase}</td>
+                    <td class="px-3 py-2.5 text-center"></td>
+                </tr>
+            `;
+        }
+    }
+
+    renderFcrAgentChart(agentList);
+}
+
+function renderFcrAgentChart(agentList) {
+    const chartEl = document.getElementById('fcrAgentComparisonChart');
+    if (!chartEl) return;
+
+    if (chartInstances['fcrAgentChart']) {
+        try { chartInstances['fcrAgentChart'].destroy(); } catch (e) {}
+    }
+
+    if (!agentList || agentList.length === 0) {
+        chartEl.innerHTML = '<div class="h-full flex items-center justify-center text-xs text-gray-400">ไม่มีข้อมูลสำหรับแสดงกราฟ</div>';
+        return;
+    }
+
+    chartEl.innerHTML = '';
+    // Show up to 25 top agents by base
+    const displayList = agentList.slice(0, 25);
+    const categories = displayList.map(a => a.agent);
+    const seriesData = displayList.map(a => a.pctRound);
+    const colors = displayList.map(a => a.isPass ? '#10b981' : '#f87171');
+
+    chartInstances['fcrAgentChart'] = new ApexCharts(chartEl, {
+        chart: {
+            type: 'bar',
+            height: 260,
+            toolbar: { show: false },
+            fontFamily: 'Inter, sans-serif'
+        },
+        plotOptions: {
+            bar: {
+                horizontal: false,
+                columnWidth: '45%',
+                borderRadius: 4,
+                distributed: true,
+                dataLabels: { position: 'top' }
+            }
+        },
+        dataLabels: {
+            enabled: true,
+            formatter: val => `${val}%`,
+            offsetY: -16,
+            style: { fontSize: '10px', fontWeight: 800, colors: ['#1e293b'] }
+        },
+        colors: colors,
+        series: [{ name: '%FCR', data: seriesData }],
+        xaxis: {
+            categories: categories,
+            labels: {
+                rotate: -25,
+                rotateAlways: categories.length > 3,
+                style: { fontSize: '10px', fontWeight: 600 }
+            }
+        },
+        yaxis: {
+            min: 0,
+            max: 105,
+            tickAmount: 4,
+            labels: { formatter: v => `${Math.round(v)}%`, style: { fontSize: '10px' } },
+            title: { text: '%FCR', style: { fontSize: '11px', fontWeight: 600 } }
+        },
+        annotations: {
+            yaxis: [{
+                y: 90,
+                borderColor: '#ef4444',
+                strokeDashArray: 4,
+                label: {
+                    borderColor: '#ef4444',
+                    style: { color: '#fff', background: '#ef4444', fontSize: '9px', fontWeight: 700 },
+                    text: 'Target > 90%'
+                }
+            }]
+        },
+        legend: { show: false },
+        grid: { borderColor: '#f1f5f9', strokeDashArray: 3 }
+    });
+    chartInstances['fcrAgentChart'].render();
 }
 
 function renderFcrChannelGroupChart(allPct, voicePct, linePct, otherPct) {
@@ -4177,6 +4469,7 @@ function renderFcrTable(list) {
                 <td class="px-4 py-2.5 text-center">${stateBadge}</td>
                 <td class="px-4 py-2.5 text-center bg-teal-50/20">${fcrBadge}</td>
                 <td class="px-4 py-2.5 text-gray-600">${d.applicationAcronym || '-'}</td>
+                <td class="px-4 py-2.5 font-bold text-teal-900 bg-teal-50/40 border-x border-teal-100 max-w-[170px] truncate" title="${d.openedBy || '-'}">${d.openedBy || '-'}</td>
                 <td class="px-4 py-2.5 text-gray-700 max-w-[160px] truncate" title="${d.assignee}">${d.assignee || '-'}</td>
                 <td class="px-4 py-2.5 text-gray-600 max-w-[220px] truncate" title="${d.shortDescription}">${d.shortDescription || '-'}</td>
                 <td class="px-4 py-2.5">${remarkCell}</td>
@@ -4219,7 +4512,7 @@ window.exportFcrToCSV = function() {
         alert('ไม่มีข้อมูล %FCR ให้ Export');
         return;
     }
-    let csv = "\uFEFFNumber,Opened,Week,Channel,Service,Category,State,FCR Status,Application Acronym,Assignee,Short Description,Remarks\n";
+    let csv = "\uFEFFNumber,Opened,Week,Channel,Service,Category,State,FCR Status,Application Acronym,Opened by,Assignee,Short Description,Remarks\n";
     lastFilteredFcrList.forEach(d => {
         csv += [
             `"${d.number}"`,
@@ -4231,6 +4524,7 @@ window.exportFcrToCSV = function() {
             `"${d.state}"`,
             `"${d.isRightFcr ? 'FCR (Counted)' : 'Non-FCR (Base Only)'}"`,
             `"${d.applicationAcronym || ''}"`,
+            `"${d.openedBy || ''}"`,
             `"${d.assignee || ''}"`,
             `"${(d.shortDescription || '').replace(/"/g, '""')}"`,
             `"${(d.remark || '').replace(/"/g, '""')}"`
