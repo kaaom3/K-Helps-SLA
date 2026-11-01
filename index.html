@@ -1176,6 +1176,19 @@
             <!-- ============================================================== -->
             <div id="fcrModuleView" class="module-view hidden">
 
+                <!-- PROMINENT SUB-TAB SWITCHER (FCR) -->
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <div class="inline-flex p-1 bg-gray-200/90 rounded-xl shadow-inner gap-1 text-xs sm:text-sm font-semibold">
+                        <button id="fcrViewBtnChannel" onclick="setFcrViewMode('channel')" class="px-4 py-2 rounded-lg transition-all shadow-xs bg-white text-teal-800 font-bold flex items-center gap-2 cursor-pointer">
+                            <span>📊 ภาพรวมตาม Channel (By Channel)</span>
+                        </button>
+                        <button id="fcrViewBtnAgent" onclick="setFcrViewMode('agent')" class="px-4 py-2 rounded-lg transition-all text-gray-600 hover:text-gray-900 font-medium flex items-center gap-2 cursor-pointer">
+                            <span>👤 สรุปตาม Agent (By Agent - Opened by)</span>
+                            <span id="fcrAgentCountPill" class="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full border border-teal-200">0</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- TOP FILTER BAR (FCR) -->
                 <div class="bg-white rounded-xl shadow-xs border border-gray-100 px-5 py-3 mb-5 flex flex-col gap-3">
                     <!-- Row 1: Week Filters & Channel Group Filters -->
@@ -1201,27 +1214,14 @@
                         </div>
                     </div>
 
-                    <!-- Row 2: View Switch + FCR Status Pills + Search + Export -->
+                    <!-- Row 2: FCR Status Pills + Search + Export -->
                     <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 pt-2.5">
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <!-- Toggle Sub-tab: By Channel vs By Agent -->
-                            <div class="flex items-center bg-gray-100 p-0.5 rounded-lg gap-1 text-xs">
-                                <button id="fcrViewBtnChannel" onclick="setFcrViewMode('channel')" class="px-3.5 py-1.5 rounded-md font-semibold transition-all shadow-2xs bg-white text-teal-800 flex items-center gap-1.5 cursor-pointer">
-                                    <span>📊 ภาพรวมตาม Channel</span>
-                                </button>
-                                <button id="fcrViewBtnAgent" onclick="setFcrViewMode('agent')" class="px-3.5 py-1.5 rounded-md font-medium transition-all text-gray-600 hover:text-gray-900 flex items-center gap-1.5 cursor-pointer">
-                                    <span>👤 สรุปตาม Agent (By Agent)</span>
-                                    <span id="fcrAgentCountPill" class="text-[9px] bg-teal-100 text-teal-800 font-bold px-1.5 py-0.2 rounded-full">0</span>
-                                </button>
-                            </div>
-
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="text-[10px] font-bold text-gray-400 uppercase">FCR Filter:</span>
-                                <div class="flex items-center gap-1" id="fcrStatusPills">
-                                    <button class="quick-filter-btn active" data-fcrstatus="all" onclick="setFcrStatusFilter('all')">All (ทั้งหมด)</button>
-                                    <button class="quick-filter-btn" data-fcrstatus="fcr" onclick="setFcrStatusFilter('fcr')">FCR (ตัวตั้ง)</button>
-                                    <button class="quick-filter-btn" data-fcrstatus="non_fcr" onclick="setFcrStatusFilter('non_fcr')">Non-FCR (ส่วนต่าง)</button>
-                                </div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">FCR Filter:</span>
+                            <div class="flex items-center gap-1" id="fcrStatusPills">
+                                <button class="quick-filter-btn active" data-fcrstatus="all" onclick="setFcrStatusFilter('all')">All (ทั้งหมด)</button>
+                                <button class="quick-filter-btn" data-fcrstatus="fcr" onclick="setFcrStatusFilter('fcr')">FCR (ตัวตั้ง)</button>
+                                <button class="quick-filter-btn" data-fcrstatus="non_fcr" onclick="setFcrStatusFilter('non_fcr')">Non-FCR (ส่วนต่าง)</button>
                             </div>
                         </div>
 

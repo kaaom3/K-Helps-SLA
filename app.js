@@ -3828,17 +3828,17 @@ window.setFcrViewMode = function(mode) {
     const viewAgent = document.getElementById('fcrAgentViewContainer');
 
     [btnChannel, btnAgent].forEach(b => {
-        b?.classList.remove('bg-white', 'text-teal-800', 'shadow-2xs', 'font-semibold');
+        b?.classList.remove('bg-white', 'text-teal-800', 'shadow-xs', 'font-bold');
         b?.classList.add('text-gray-600', 'font-medium');
     });
     [viewChannel, viewAgent].forEach(v => v?.classList.add('hidden'));
 
     if (mode === 'agent') {
-        btnAgent?.classList.add('bg-white', 'text-teal-800', 'shadow-2xs', 'font-semibold');
+        btnAgent?.classList.add('bg-white', 'text-teal-800', 'shadow-xs', 'font-bold');
         btnAgent?.classList.remove('text-gray-600', 'font-medium');
         viewAgent?.classList.remove('hidden');
     } else {
-        btnChannel?.classList.add('bg-white', 'text-teal-800', 'shadow-2xs', 'font-semibold');
+        btnChannel?.classList.add('bg-white', 'text-teal-800', 'shadow-xs', 'font-bold');
         btnChannel?.classList.remove('text-gray-600', 'font-medium');
         viewChannel?.classList.remove('hidden');
     }
