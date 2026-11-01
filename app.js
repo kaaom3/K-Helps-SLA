@@ -4,8 +4,26 @@
 // Module 2: Task SLA (Incident Management - 2h, 4h, 8h / 28,800s)
 // ============================================================
 
-const VALID_AGENTS_ARRAY = ["963516", "สิริยากร  โยธาจันทร์", "สมเกียรติ จารุพฤฒิพงศ์", "komkrit praditja", "สาวิตรี ต้นโนนยาง", "somkiat.ja", "26455", "kittipa.j@kbtg.tech", "34323", "seksan parameejae", "26465", "panisara nerngsri", "mewika phankingtip", "panisara.n@kbtg.tech", "963546", "nithus dangpuk", "theerawut bokkhaodaeng", "23224", "เสกสรร ปาระมีแจ้", "kitibhumi.p", "pantip.to@kbtg.tech", "นุสรา  พูลสมบัติ", "mewika.p@kbtg.tech", "pornpoom tevakoop", "chadaporn.sa@kbtg.tech", "anusit kwaenkonchim", "36145", "pornpoom.t@kbtg.tech", "kochakorn.k", "nutchanat.p@kbtg.tech", "35900", "parinya singthongla", "nusara.p", "28403", "yasumin tansila", "nutchanat pavongna", "kittiyakorn hanraeng", "เมวิกา พันธ์กิ่งทิพย์", "ananya.l", "pattaraporn noisumdang", "อนัญญา โลหะพรหม", "กิตติภา แจ้งคล้ายคม", "20153", "23140", "กิติภูมิ เปรมเดช", "mallika tomprasert", "siriyakorn yothachan", "kochakorn kansomsart", "963535", "พันธุ์ทิพย์ ทองมอญ", "ปาณิสรา เนื่องศรี", "35237", "kittiyakorn.h@kbtg.tech", "พรภูมิ เทวคุปต์", "komkrit.pr@kbtg.tech", "ananya lohaphrom", "จุฑารัตน์ กาลวงษ์", "963722", "mallika.to@kbtg.tech", "kittipa jangklaykom", "theerawut.b@kbtg.tech", "35536", "26215", "sawitree tononnyang", "9299", "27072", "pantip tongmorn", "967229", "อนุสิทธิ์ แคว้นคอนฉิม", "anusit.k@kbtg.tech", "ธีรวุฒิ บกเขาแดง", "suriya rangwankham", "kitibhumi premdech", "sawitree.ton@kbtg.tech", "parinya.si@kbtg.tech", "29392", "29752", "suriya.r@kbtg.tech", "กิตติยากร หารแรง", "ภัทรภรณ์ น้อยสำแดง", "yasumin.t@kbtg.tech", "35905", "nusara poolsombat", "nithus.d@kbtg.tech", "ญาสุมินทร์ แท่นศิลา", "33580", "ชฎาพร สนองชัยกุล", "pattaraporn.n@kbtg.tech", "ปริญญา สิงห์ทองลา", "siriyakorn.y@kbtg.tech", "somkiat jarupruttipong", "คมกริช  ประดิษฐจา", "963524", "jutharat kalavong", "นายสุริยา รางวัลคำ", "นุชนาถ ปาวงศ์นา", "seksan.pa", "chadaporn sanongchaikul", "34591", "นิทัศน์ แดงพุก", "มัลลิกา ถมประเสริฐ", "กชกร การสมศาสตร์", "jutharat.ka@kbtg.tech", "32778"];
+const VALID_AGENTS_ARRAY = [
+    "963516", "สิริยากร  โยธาจันทร์", "สมเกียรติ จารุพฤฒิพงศ์", "komkrit praditja", "สาวิตรี ต้นโนนยาง", "somkiat.ja", "26455", "kittipa.j@kbtg.tech", "34323", "seksan parameejae", "26465", "panisara nerngsri", "mewika phankingtip", "mewika phankingthip", "phankingthip", "panisara.n@kbtg.tech", "963546", "nithus dangpuk", "theerawut bokkhaodaeng", "23224", "เสกสรร ปาระมีแจ้", "kitibhumi.p", "pantip.to@kbtg.tech", "นุสรา  พูลสมบัติ", "mewika.p@kbtg.tech", "pornpoom tevakoop", "chadaporn.sa@kbtg.tech", "anusit kwaenkonchim", "anusit khaenkhonchim", "khaenkhonchim", "36145", "pornpoom.t@kbtg.tech", "kochakorn.k", "nutchanat.p@kbtg.tech", "35900", "parinya singthongla", "parinya singtongla", "singtongla", "nusara.p", "28403", "yasumin tansila", "nutchanat pavongna", "kittiyakorn hanraeng", "เมวิกา พันธ์กิ่งทิพย์", "ananya.l", "pattaraporn noisumdang", "อนัญญา โลหะพรหม", "กิตติภา แจ้งคล้ายคม", "20153", "23140", "กิติภูมิ เปรมเดช", "mallika tomprasert", "siriyakorn yothachan", "kochakorn kansomsart", "963535", "พันธุ์ทิพย์ ทองมอญ", "ปาณิสรา เนื่องศรี", "35237", "kittiyakorn.h@kbtg.tech", "พรภูมิ เทวคุปต์", "komkrit.pr@kbtg.tech", "ananya lohaphrom", "จุฑารัตน์ กาลวงษ์", "963722", "mallika.to@kbtg.tech", "kittipa jangklaykom", "theerawut.b@kbtg.tech", "35536", "26215", "sawitree tononnyang", "9299", "27072", "pantip tongmorn", "967229", "อนุสิทธิ์ แคว้นคอนฉิม", "anusit.k@kbtg.tech", "ธีรวุฒิ บกเขาแดง", "suriya rangwankham", "kitibhumi premdech", "sawitree.ton@kbtg.tech", "parinya.si@kbtg.tech", "29392", "29752", "suriya.r@kbtg.tech", "กิตติยากร หารแรง", "ภัทรภรณ์ น้อยสำแดง", "yasumin.t@kbtg.tech", "35905", "nusara poolsombat", "nithus.d@kbtg.tech", "ญาสุมินทร์ แท่นศิลา", "33580", "ชฎาพร สนองชัยกุล", "pattaraporn.n@kbtg.tech", "ปริญญา สิงห์ทองลา", "siriyakorn.y@kbtg.tech", "somkiat jarupruttipong", "คมกริช  ประดิษฐจา", "963524", "jutharat kalavong", "นายสุริยา รางวัลคำ", "นุชนาถ ปาวงศ์นา", "seksan.pa", "chadaporn sanongchaikul", "34591", "นิทัศน์ แดงพุก", "มัลลิกา ถมประเสริฐ", "กชกร การสมศาสตร์", "jutharat.ka@kbtg.tech", "32778"
+];
 const validAgents = new Set(VALID_AGENTS_ARRAY.map(a => a.toLowerCase().replace(/\s+/g, ' ').trim()));
+
+const TEAM_FIRST_NAMES = new Set([
+    'komkrit', 'seksan', 'panisara', 'mewika', 'nithus', 'theerawut',
+    'pornpoom', 'anusit', 'parinya', 'yasumin', 'nutchanat', 'kittiyakorn',
+    'pattaraporn', 'mallika', 'siriyakorn', 'kochakorn', 'ananya', 'kittipa',
+    'sawitree', 'pantip', 'suriya', 'kitibhumi', 'nusara', 'somkiat',
+    'jutharat', 'chadaporn'
+]);
+
+const TEAM_THAI_FIRST_NAMES = new Set([
+    'คมกริช', 'เสกสรร', 'ปาณิสรา', 'เมวิกา', 'นิทัศน์', 'ธีรวุฒิ',
+    'พรภูมิ', 'อนุสิทธิ์', 'ปริญญา', 'ญาสุมินทร์', 'นุชนาถ', 'กิตติยากร',
+    'ภัทรภรณ์', 'มัลลิกา', 'สิริยากร', 'กชกร', 'อนัญญา', 'กิตติภา',
+    'สาวิตรี', 'พันธุ์ทิพย์', 'สุริยา', 'กิติภูมิ', 'นุสรา', 'สมเกียรติ',
+    'จุฑารัตน์', 'ชฎาพร'
+]);
 
 function isTeamAgent(name) {
     if (!name) return false;
@@ -16,6 +34,14 @@ function isTeamAgent(name) {
     // Strip Thai honorifics / prefixes (นาย, นาง, นางสาว)
     const strippedTitle = clean.replace(/^(นาย|นาง|นางสาว)\s*/, '');
     if (validAgents.has(strippedTitle)) return true;
+
+    // Check by words / tokens (first name or last name match)
+    const words = clean.split(/[\s,._@()/-]+/);
+    for (const w of words) {
+        if (!w) continue;
+        if (TEAM_FIRST_NAMES.has(w) || TEAM_THAI_FIRST_NAMES.has(w)) return true;
+        if (validAgents.has(w)) return true;
+    }
 
     // Substring match for names of length >= 5
     for (const v of validAgents) {
