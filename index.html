@@ -1194,6 +1194,19 @@
                             <span id="fcrAgentCountPill" class="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full border border-teal-200">0</span>
                         </button>
                     </div>
+
+                    <!-- Scope Switcher Pill (Visible when Agent mode is active) -->
+                    <div id="fcrAgentScopeSwitcher" class="hidden flex items-center bg-gray-200/80 p-1 rounded-xl shadow-inner border border-gray-200 text-xs">
+                        <span class="text-[11px] font-bold text-gray-500 mr-2 ml-1">ขอบเขต:</span>
+                        <button id="fcrScopeTeamBtn" onclick="setFcrAgentScope('team')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-teal-800 shadow-xs transition-all cursor-pointer">
+                            <span>👥 เฉพาะ Agent ในทีม</span>
+                            <span id="fcrScopeTeamCount" class="text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded-full font-bold">0</span>
+                        </button>
+                        <button id="fcrScopeAllBtn" onclick="setFcrAgentScope('all')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition-all cursor-pointer">
+                            <span>🌐 ทุกคนที่เปิดเคส (All)</span>
+                            <span id="fcrScopeAllCount" class="text-[10px] bg-gray-300 text-gray-700 px-1.5 py-0.2 rounded-full font-bold">0</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- TOP FILTER BAR (FCR) -->
@@ -1422,9 +1435,9 @@
                         <div class="kpi-card group bg-white rounded-xl shadow-xs border border-gray-100 p-4 cursor-default">
                             <div class="flex items-start justify-between">
                                 <div>
-                                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total Agents (Opened by)</p>
+                                    <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider" id="fcrAgentTotalCardLabel">Total Agents ในทีม (Opened by)</p>
                                     <p class="text-2xl font-bold text-gray-800 mt-1 kpi-number" id="fcrAgentTotalCard">0</p>
-                                    <p class="text-[11px] text-gray-500 mt-0.5">มีเคสในระบบทั้งหมด</p>
+                                    <p class="text-[11px] text-gray-500 mt-0.5" id="fcrAgentTotalCardSub">เฉพาะ Agent ทีม K-Helps</p>
                                 </div>
                                 <div class="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center group-hover:scale-110 transition-transform">
                                     <svg class="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
@@ -1479,7 +1492,7 @@
                     <div class="bg-white rounded-xl shadow-xs border border-gray-100 p-4">
                         <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                             <div>
-                                <h3 class="text-sm font-bold text-gray-800">กราฟเปรียบเทียบ %FCR แต่ละ Agent (Target &gt; 90%)</h3>
+                                <h3 class="text-sm font-bold text-gray-800" id="fcrAgentChartTitle">กราฟเปรียบเทียบ %FCR แต่ละ Agent ในทีม (Target &gt; 90%)</h3>
                                 <p class="text-[11px] text-gray-500">ดึงข้อมูลและจัดกลุ่มตามชื่อผู้เปิดเคส (Opened by)</p>
                             </div>
                             <span class="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded">🔴 เส้นประ = Target 90%</span>
@@ -1492,7 +1505,7 @@
                         <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
                             <div class="flex items-center gap-2">
                                 <div class="w-2.5 h-2.5 rounded-full bg-teal-600"></div>
-                                <h3 class="text-sm font-bold text-gray-800">ตารางสรุป %FCR ราย Agent (Grouped by Opened by)</h3>
+                                <h3 class="text-sm font-bold text-gray-800" id="fcrAgentTableTitle">ตารางสรุป %FCR ราย Agent ในทีม (Grouped by Opened by)</h3>
                                 <span id="fcrAgentTableCountBadge" class="text-[10px] bg-teal-50 text-teal-800 font-bold px-2 py-0.5 rounded-full border border-teal-200">0 คน</span>
                             </div>
                             <div class="flex items-center gap-2">
@@ -1577,6 +1590,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261101_1545"></script>
+    <script src="app.js?v=20261101_1605"></script>
 </body>
 </html>

@@ -5,7 +5,25 @@
 // ============================================================
 
 const VALID_AGENTS_ARRAY = ["963516", "สิริยากร  โยธาจันทร์", "สมเกียรติ จารุพฤฒิพงศ์", "komkrit praditja", "สาวิตรี ต้นโนนยาง", "somkiat.ja", "26455", "kittipa.j@kbtg.tech", "34323", "seksan parameejae", "26465", "panisara nerngsri", "mewika phankingtip", "panisara.n@kbtg.tech", "963546", "nithus dangpuk", "theerawut bokkhaodaeng", "23224", "เสกสรร ปาระมีแจ้", "kitibhumi.p", "pantip.to@kbtg.tech", "นุสรา  พูลสมบัติ", "mewika.p@kbtg.tech", "pornpoom tevakoop", "chadaporn.sa@kbtg.tech", "anusit kwaenkonchim", "36145", "pornpoom.t@kbtg.tech", "kochakorn.k", "nutchanat.p@kbtg.tech", "35900", "parinya singthongla", "nusara.p", "28403", "yasumin tansila", "nutchanat pavongna", "kittiyakorn hanraeng", "เมวิกา พันธ์กิ่งทิพย์", "ananya.l", "pattaraporn noisumdang", "อนัญญา โลหะพรหม", "กิตติภา แจ้งคล้ายคม", "20153", "23140", "กิติภูมิ เปรมเดช", "mallika tomprasert", "siriyakorn yothachan", "kochakorn kansomsart", "963535", "พันธุ์ทิพย์ ทองมอญ", "ปาณิสรา เนื่องศรี", "35237", "kittiyakorn.h@kbtg.tech", "พรภูมิ เทวคุปต์", "komkrit.pr@kbtg.tech", "ananya lohaphrom", "จุฑารัตน์ กาลวงษ์", "963722", "mallika.to@kbtg.tech", "kittipa jangklaykom", "theerawut.b@kbtg.tech", "35536", "26215", "sawitree tononnyang", "9299", "27072", "pantip tongmorn", "967229", "อนุสิทธิ์ แคว้นคอนฉิม", "anusit.k@kbtg.tech", "ธีรวุฒิ บกเขาแดง", "suriya rangwankham", "kitibhumi premdech", "sawitree.ton@kbtg.tech", "parinya.si@kbtg.tech", "29392", "29752", "suriya.r@kbtg.tech", "กิตติยากร หารแรง", "ภัทรภรณ์ น้อยสำแดง", "yasumin.t@kbtg.tech", "35905", "nusara poolsombat", "nithus.d@kbtg.tech", "ญาสุมินทร์ แท่นศิลา", "33580", "ชฎาพร สนองชัยกุล", "pattaraporn.n@kbtg.tech", "ปริญญา สิงห์ทองลา", "siriyakorn.y@kbtg.tech", "somkiat jarupruttipong", "คมกริช  ประดิษฐจา", "963524", "jutharat kalavong", "นายสุริยา รางวัลคำ", "นุชนาถ ปาวงศ์นา", "seksan.pa", "chadaporn sanongchaikul", "34591", "นิทัศน์ แดงพุก", "มัลลิกา ถมประเสริฐ", "กชกร การสมศาสตร์", "jutharat.ka@kbtg.tech", "32778"];
-const validAgents = new Set(VALID_AGENTS_ARRAY.map(a => a.toLowerCase()));
+const validAgents = new Set(VALID_AGENTS_ARRAY.map(a => a.toLowerCase().replace(/\s+/g, ' ').trim()));
+
+function isTeamAgent(name) {
+    if (!name) return false;
+    const clean = String(name).toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!clean) return false;
+    if (validAgents.has(clean)) return true;
+
+    // Strip Thai honorifics / prefixes (นาย, นาง, นางสาว)
+    const strippedTitle = clean.replace(/^(นาย|นาง|นางสาว)\s*/, '');
+    if (validAgents.has(strippedTitle)) return true;
+
+    // Substring match for names of length >= 5
+    for (const v of validAgents) {
+        if (v.length >= 5 && clean.includes(v)) return true;
+        if (clean.length >= 5 && v.includes(clean)) return true;
+    }
+    return false;
+}
 
 // Global State
 let currentActiveModule = 'chatSla'; // 'chatSla', 'taskSla', or 'callReport'
@@ -30,6 +48,7 @@ let fcrFilterWeek = 'all';       // 'all' or weekKey
 let fcrFilterChannelGroup = 'all'; // 'all', 'voice', 'line', 'other'
 let fcrFilterStatus = 'all';     // 'all', 'fcr', 'non_fcr'
 let fcrViewMode = 'channel';     // 'channel' or 'agent'
+let fcrAgentScope = 'team';      // 'team' (default - เฉพาะ Agent ในทีม) or 'all' (ทุกคน)
 let selectedFcrAgent = 'all';    // 'all' or agent name (from Opened by)
 let chartInstances = {};
 
@@ -715,9 +734,13 @@ function updateNavBadges() {
         fcrBadge.classList.toggle('hidden', processedFcrData.length === 0);
     }
     if (fcrAgentBadge) {
-        const uniqueAgents = new Set(processedFcrData.map(d => d.openedBy || d.assignee).filter(Boolean));
-        fcrAgentBadge.textContent = uniqueAgents.size;
-        fcrAgentBadge.classList.toggle('hidden', uniqueAgents.size === 0);
+        const targetAgents = new Set(
+            processedFcrData
+                .map(d => d.openedBy || d.assignee)
+                .filter(name => name && (fcrAgentScope === 'all' || isTeamAgent(name)))
+        );
+        fcrAgentBadge.textContent = targetAgents.size;
+        fcrAgentBadge.classList.toggle('hidden', targetAgents.size === 0);
     }
     const dropChatBadge = document.getElementById('clearChatCountBadge');
     const dropTaskBadge = document.getElementById('clearTaskCountBadge');
@@ -3848,6 +3871,8 @@ window.setFcrViewMode = function(mode) {
     });
     [viewChannel, viewAgent].forEach(v => v?.classList.add('hidden'));
 
+    const scopeSwitcher = document.getElementById('fcrAgentScopeSwitcher');
+
     if (mode === 'agent') {
         btnAgent?.classList.add('bg-white', 'text-teal-800', 'shadow-xs', 'font-bold');
         btnAgent?.classList.remove('text-gray-600', 'font-medium');
@@ -3855,6 +3880,7 @@ window.setFcrViewMode = function(mode) {
         tabFcr?.classList.remove('active');
         tabFcrAgent?.classList.add('active');
         currentActiveModule = 'fcrAgent';
+        scopeSwitcher?.classList.remove('hidden');
     } else {
         btnChannel?.classList.add('bg-white', 'text-teal-800', 'shadow-xs', 'font-bold');
         btnChannel?.classList.remove('text-gray-600', 'font-medium');
@@ -3862,7 +3888,9 @@ window.setFcrViewMode = function(mode) {
         tabFcr?.classList.add('active');
         tabFcrAgent?.classList.remove('active');
         currentActiveModule = 'fcr';
+        scopeSwitcher?.classList.add('hidden');
     }
+    updateNavBadges();
     updateFcrDashboardView();
     setTimeout(() => {
         try {
@@ -3873,6 +3901,38 @@ window.setFcrViewMode = function(mode) {
             }
         } catch (e) {}
     }, 60);
+};
+
+window.setFcrAgentScope = function(scope) {
+    fcrAgentScope = scope;
+    fcrTablePage = 1;
+    selectedFcrAgent = 'all';
+
+    const btnTeam = document.getElementById('fcrScopeTeamBtn');
+    const btnAll = document.getElementById('fcrScopeAllBtn');
+    if (btnTeam && btnAll) {
+        if (scope === 'team') {
+            btnTeam.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-teal-800 shadow-xs transition-all cursor-pointer';
+            btnAll.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition-all cursor-pointer';
+        } else {
+            btnAll.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-teal-800 shadow-xs transition-all cursor-pointer';
+            btnTeam.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:text-gray-900 transition-all cursor-pointer';
+        }
+    }
+
+    const totalLabel = document.getElementById('fcrAgentTotalCardLabel');
+    if (totalLabel) totalLabel.textContent = scope === 'team' ? 'Total Agents ในทีม (Opened by)' : 'Total Agents ทั้งหมด (Opened by)';
+    const totalSub = document.getElementById('fcrAgentTotalCardSub');
+    if (totalSub) totalSub.textContent = scope === 'team' ? 'เฉพาะสมาชิกทีม K-Helps' : 'ทุกคนที่มีการเปิดเคสในระบบ';
+
+    const chartTitle = document.getElementById('fcrAgentChartTitle');
+    if (chartTitle) chartTitle.textContent = scope === 'team' ? 'กราฟเปรียบเทียบ %FCR แต่ละ Agent ในทีม (Target > 90%)' : 'กราฟเปรียบเทียบ %FCR แต่ละ Agent ทั้งหมด (Target > 90%)';
+
+    const tableTitle = document.getElementById('fcrAgentTableTitle');
+    if (tableTitle) tableTitle.textContent = scope === 'team' ? 'ตารางสรุป %FCR ราย Agent ในทีม (Grouped by Opened by)' : 'ตารางสรุป %FCR ราย Agent ทั้งหมด (Grouped by Opened by)';
+
+    updateNavBadges();
+    updateFcrDashboardView();
 };
 
 window.selectFcrAgent = function(agentName) {
@@ -4115,8 +4175,16 @@ function updateFcrDashboardView() {
         tableList = tableList.filter(d => !d.isRightFcr);
     }
 
-    if (selectedFcrAgent !== 'all') {
-        tableList = tableList.filter(d => (d.openedBy || d.assignee) === selectedFcrAgent);
+    if (fcrViewMode === 'agent') {
+        if (selectedFcrAgent !== 'all') {
+            tableList = tableList.filter(d => (d.openedBy || d.assignee) === selectedFcrAgent);
+        } else if (fcrAgentScope === 'team') {
+            tableList = tableList.filter(d => isTeamAgent(d.openedBy || d.assignee));
+        }
+    } else {
+        if (selectedFcrAgent !== 'all') {
+            tableList = tableList.filter(d => (d.openedBy || d.assignee) === selectedFcrAgent);
+        }
     }
 
     const activeBadge = document.getElementById('fcrActiveAgentFilterBadge');
@@ -4124,6 +4192,9 @@ function updateFcrDashboardView() {
     if (activeBadge && activeName) {
         if (selectedFcrAgent !== 'all') {
             activeName.textContent = selectedFcrAgent;
+            activeBadge.classList.remove('hidden');
+        } else if (fcrViewMode === 'agent' && fcrAgentScope === 'team') {
+            activeName.textContent = 'เฉพาะสมาชิกทีม K-Helps';
             activeBadge.classList.remove('hidden');
         } else {
             activeBadge.classList.add('hidden');
@@ -4149,8 +4220,22 @@ function updateFcrDashboardView() {
 }
 
 function renderFcrAgentView(weekFiltered) {
+    const teamFiltered = weekFiltered.filter(d => isTeamAgent(d.openedBy || d.assignee));
+    const totalTeamCount = new Set(teamFiltered.map(d => d.openedBy || d.assignee)).size;
+    const totalAllCount = new Set(weekFiltered.map(d => d.openedBy || d.assignee).filter(Boolean)).size;
+
+    const countPill = document.getElementById('fcrAgentCountPill');
+    if (countPill) countPill.textContent = fcrAgentScope === 'team' ? totalTeamCount : totalAllCount;
+
+    const teamCountEl = document.getElementById('fcrScopeTeamCount');
+    if (teamCountEl) teamCountEl.textContent = totalTeamCount;
+    const allCountEl = document.getElementById('fcrScopeAllCount');
+    if (allCountEl) allCountEl.textContent = totalAllCount;
+
+    const targetList = fcrAgentScope === 'team' ? teamFiltered : weekFiltered;
+
     const agentMap = new Map();
-    weekFiltered.forEach(d => {
+    targetList.forEach(d => {
         const ag = d.openedBy || d.assignee || 'Unknown';
         if (!agentMap.has(ag)) {
             agentMap.set(ag, {
@@ -4199,9 +4284,6 @@ function renderFcrAgentView(weekFiltered) {
     const avgPct = totalAgents > 0 ? Math.round(agentList.reduce((s, a) => s + a.pctExact, 0) / totalAgents) : 0;
 
     // Update Badges & Cards
-    const countPill = document.getElementById('fcrAgentCountPill');
-    if (countPill) countPill.textContent = totalAgents;
-
     const tableBadge = document.getElementById('fcrAgentTableCountBadge');
     if (tableBadge) tableBadge.textContent = `${totalAgents.toLocaleString()} คน`;
 
@@ -4217,7 +4299,7 @@ function renderFcrAgentView(weekFiltered) {
 
     if (tbody && tfoot) {
         if (agentList.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="11" class="p-8 text-center text-xs text-gray-400">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="p-8 text-center text-xs text-gray-400">ไม่พบข้อมูล Agent ${fcrAgentScope === 'team' ? 'ในทีม K-Helps' : ''} ตามเงื่อนไขที่เลือก (สามารถสลับเป็น 'แสดงทุกคน' ได้)</td></tr>`;
             tfoot.innerHTML = `<tr><td colspan="2" class="px-4 py-2.5">Grand Total</td><td class="px-4 py-2.5 text-right font-mono">0</td><td class="px-4 py-2.5 text-right font-mono">0</td><td class="px-4 py-2.5 text-right font-mono">0</td><td class="px-4 py-2.5 text-right font-mono">0%</td><td colspan="5"></td></tr>`;
         } else {
             let totalBaseSum = 0;
