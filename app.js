@@ -718,18 +718,16 @@ function switchModuleTab(moduleName) {
         if (clearBtnText) clearBtnText.textContent = 'Clear Abandoned DB';
         setupAbandonedWeekFilters();
         updateAbandonedDashboardView();
-    } else if (moduleName === 'fcr') {
+    } else if (moduleName === 'fcr' || moduleName === 'fcrAgent') {
         tabFcr?.classList.add('active');
         viewFcr?.classList.remove('hidden');
         if (clearBtnText) clearBtnText.textContent = 'Clear FCR DB';
         setupFcrWeekFilters();
-        setFcrViewMode('channel');
-    } else if (moduleName === 'fcrAgent') {
-        tabFcrAgent?.classList.add('active');
-        viewFcr?.classList.remove('hidden');
-        if (clearBtnText) clearBtnText.textContent = 'Clear FCR DB';
-        setupFcrWeekFilters();
-        setFcrViewMode('agent');
+        if (moduleName === 'fcrAgent') {
+            setFcrViewMode('agent');
+        } else {
+            setFcrViewMode(fcrViewMode || 'channel');
+        }
     }
 }
 
@@ -3749,25 +3747,27 @@ function animateNumber(id, target) {
 // MODULE 5: %FCR (Target>90%) Parser, Pivot & UI Logic
 // ============================================================
 
-// เงื่อนไขตารางซ้าย (ตัวหาร):
-// 1. Service: ตัด Tracking ออก
+// เงื่อนไขตารางซ้าย (ตัวหาร Base):
+// 1. Service: ตัด Tracking, Software Support, Hardware Support ออก
 // 2. Category: เลือกเฉพาะ Email, Inquiry/Help (Inquiry / Help), Software
 function checkFcrLeftBase(rec) {
-    const srv = String(rec.service || '').trim().toLowerCase();
+    const srv = String(rec.service || '').trim().toLowerCase().replace(/\s+/g, ' ');
     if (srv.includes('tracking')) return false;
+    if (srv.includes('software support')) return false;
+    if (srv.includes('hardware support')) return false;
 
     const cat = String(rec.category || '').trim().toLowerCase().replace(/\s+/g, '');
     return cat === 'email' || cat === 'inquiry/help' || cat === 'software';
 }
 
 // เงื่อนไขตารางขวา (ตัวตั้ง FCR):
-// 1. ผ่านเงื่อนไขตารางซ้าย (Category = Email, Inquiry/Help, Software)
-// 2. Service: เลือกเฉพาะ RFI (RFI & Advisory Service) อย่างเดียว
-// 3. State: เลือกเฉพาะ Resolved, Closed
+// 1. ผ่านเงื่อนไข Category เหมือนฝั่งซ้าย (Email, Inquiry/Help, Software)
+// 2. Service: เลือกเฉพาะ RFI อย่างเดียว
+// 3. State: เลือกแค่ Resolved, Closed
 function checkFcrRightTarget(rec) {
     if (!checkFcrLeftBase(rec)) return false;
 
-    const srv = String(rec.service || '').trim().toLowerCase();
+    const srv = String(rec.service || '').trim().toLowerCase().replace(/\s+/g, ' ');
     if (!srv.includes('rfi')) return false;
 
     const st = String(rec.state || '').trim().toLowerCase();

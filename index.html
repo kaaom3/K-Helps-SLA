@@ -215,19 +215,12 @@
                         <span>Call Back (ABN Call of Ex)</span>
                         <span id="navBadgeAbandoned" class="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold hidden">0</span>
                     </button>
-                    <button id="tabBtnFcr" onclick="switchModuleTab('fcr')" class="module-tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5" title="สรุป %FCR ตามช่องทาง (Channel)">
+                    <button id="tabBtnFcr" onclick="switchModuleTab('fcr')" class="module-tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5" title="%FCR (Target>90%)">
                         <svg class="w-3.5 h-3.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
-                        <span>FCR By Channels</span>
+                        <span>%FCR (Target>90%)</span>
                         <span id="navBadgeFcr" class="text-[9px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 font-bold hidden">0</span>
-                    </button>
-                    <button id="tabBtnFcrAgent" onclick="switchModuleTab('fcrAgent')" class="module-tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5" title="วิเคราะห์ %FCR รายบุคคล (ดึงจาก Opened by)">
-                        <svg class="w-3.5 h-3.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                        </svg>
-                        <span>FCR By Agents</span>
-                        <span id="navBadgeFcrAgent" class="text-[9px] px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 font-bold hidden">0</span>
                     </button>
                 </div>
             </div>
@@ -284,7 +277,7 @@
                         <button type="button" id="clearOnlyFcrBtn" class="w-full text-left px-3 py-2 hover:bg-red-50 text-gray-700 hover:text-red-600 flex items-center justify-between transition-colors">
                             <span class="flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full bg-teal-500"></span>
-                                <span>ลบเฉพาะ <b>FCR By Agents</b></span>
+                                <span>ลบเฉพาะ <b>%FCR (Target>90%)</b></span>
                             </span>
                             <span id="clearFcrCountBadge" class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-mono">0</span>
                         </button>
@@ -1635,6 +1628,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261101_1740"></script>
+    <script src="app.js?v=20261101_1750"></script>
 </body>
 </html>
