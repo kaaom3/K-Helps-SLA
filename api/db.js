@@ -55,6 +55,15 @@ module.exports = async function handler(req, res) {
         return res.status(200).end();
     }
 
+    // Health & Version Check
+    if (req.method === 'GET' && req.query && req.query.action === 'ping') {
+        return res.status(200).json({
+            ok: true,
+            nodeVersion: process.version,
+            timestamp: new Date().toISOString()
+        });
+    }
+
     try {
         const body = typeof req.body === 'string' && req.body ? JSON.parse(req.body) : (req.body || {});
 
